@@ -1915,7 +1915,7 @@ setupRealtimeListeners();
 // MAGIC GOOGLE SHEETS SYNC (DO NOT DELETE)
 // =======================================================
 function sendToGoogleSheets(csvText) {
-  var googleWebAppUrl = "https://script.google.com/macros/s/AKfycbw7YkA36_60wnJGsvDkePVjGs4TSo00oBZxdUtxcLIBTFJ3sl-0LF9b7h-eHxlJX9twzw/exec";
+  var googleWebAppUrl = "https://script.google.com/macros/s/AKfycbwsFlN0A1XysjMUEi8b-LwoROBkfwIWlUcewRfIxiV2SYvxCXHXvEKNPH6YrCsfgJyqTw/exec";
   
   fetch(googleWebAppUrl, {
     method: "POST",
