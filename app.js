@@ -1912,32 +1912,35 @@ setupRealtimeListeners();
 
 
 // =======================================================
-// MAGIC GOOGLE SHEETS SYNC (DO NOT DELETE)
+// LIVE TIME GOOGLE SHEETS SYNC
 // =======================================================
-function sendToGoogleSheets(csvText) {
-  var googleWebAppUrl = "https://script.google.com/macros/s/AKfycbwsFlN0A1XysjMUEi8b-LwoROBkfwIWlUcewRfIxiV2SYvxCXHXvEKNPH6YrCsfgJyqTw/exec";
+function sendLiveOrderToGoogleSheets(orderData) {
+  // PASTE YOUR BRAND NEW WEB APP URL BELOW!
+  var googleWebAppUrl = "https://script.google.com/macros/s/AKfycbyUKy1z1FxtRTTmhLioGad9Uz9NofGbotPIhjAbIddjI53iMqw77yjlh_DQ3xULXKJXgA/exec"; 
   
+  // Clean values to avoid issues with commas or empty fields
+  const cleanField = (field) => `"${(field || '').toString().replace(/"/g, '""')}"`;
+
+  // Map out the fields in order matching your spreadsheet columns
+  const orderNo = cleanField(orderData.orderNo);
+  const createdAt = cleanField(orderData.createdAt);
+  const buyerName = cleanField(orderData.buyerName || orderData.name);
+  const mobile = cleanField(orderData.mobile || orderData.phone);
+  const email = cleanField(orderData.email);
+  const address = cleanField(orderData.address || orderData.deliveryAddress);
+  const items = cleanField(orderData.items);
+  const total = cleanField(orderData.total || orderData.amount);
+  const status = cleanField(orderData.status);
+  const utr = cleanField(orderData.utr || orderData.utrNumber);
+
+  // Construct a clean CSV line for this single order
+  const csvLine = `${orderNo},${createdAt},${buyerName},${mobile},${email},${address},${items},${total},${status},${utr}\n`;
+
   fetch(googleWebAppUrl, {
     method: "POST",
-    body: csvText
+    body: csvLine
   })
-  .then(function(response) { return response.text(); })
-  .then(function(msg) { console.log("Google Sheet sync status: " + msg); })
-  .catch(function(err) { console.error("Google Sheet error:", err); });
+  .then(response => response.text())
+  .then(msg => console.log("Live Sync Status:", msg))
+  .catch(err => console.error("Live Sync Error:", err));
 }
-
-const originalClick = HTMLAnchorElement.prototype.click;
-HTMLAnchorElement.prototype.click = function() {
-  const href = this.href;
-  if (href && (href.startsWith('data:text/csv') || href.startsWith('blob:'))) {
-    if (href.startsWith('data:text/csv')) {
-      const csvContent = decodeURIComponent(href.split(',')[1]);
-      sendToGoogleSheets(csvContent);
-    } else if (href.startsWith('blob:')) {
-      fetch(href).then(function(r) { return r.text(); }).then(function(text) {
-        sendToGoogleSheets(text);
-      });
-    }
-  }
-  return originalClick.apply(this, arguments);
-};
