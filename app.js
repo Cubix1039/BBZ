@@ -1908,3 +1908,36 @@ function setupRealtimeListeners() {
 attachEvents();
 renderAll();
 setupRealtimeListeners();
+
+
+
+// =======================================================
+// MAGIC GOOGLE SHEETS SYNC (DO NOT DELETE)
+// =======================================================
+function sendToGoogleSheets(csvText) {
+  var googleWebAppUrl = "https://script.google.com/macros/s/AKfycbw7YkA36_60wnJGsvDkePVjGs4TSo00oBZxdUtxcLIBTFJ3sl-0LF9b7h-eHxlJX9twzw/exec";
+  
+  fetch(googleWebAppUrl, {
+    method: "POST",
+    body: csvText
+  })
+  .then(function(response) { return response.text(); })
+  .then(function(msg) { console.log("Google Sheet sync status: " + msg); })
+  .catch(function(err) { console.error("Google Sheet error:", err); });
+}
+
+const originalClick = HTMLAnchorElement.prototype.click;
+HTMLAnchorElement.prototype.click = function() {
+  const href = this.href;
+  if (href && (href.startsWith('data:text/csv') || href.startsWith('blob:'))) {
+    if (href.startsWith('data:text/csv')) {
+      const csvContent = decodeURIComponent(href.split(',')[1]);
+      sendToGoogleSheets(csvContent);
+    } else if (href.startsWith('blob:')) {
+      fetch(href).then(function(r) { return r.text(); }).then(function(text) {
+        sendToGoogleSheets(text);
+      });
+    }
+  }
+  return originalClick.apply(this, arguments);
+};
