@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover">
+    <meta name="description" content="BG BAZAAR Order Confirmation - Your order has been submitted for office pickup.">
+    <meta name="theme-color" content="#0797a8">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>BG BAZAAR | Order Confirmation</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="index.html" aria-label="BG BAZAAR home">
+        <img id="siteLogo" alt="BG BAZAAR logo" src="assets/bg-bazaar-logo.jpeg">
+        <span id="siteName">BG BAZAAR</span>
+      </a>
+      <nav aria-label="Main navigation">
+        <a href="index.html">Home</a>
+        <a href="cart.html">Cart <span id="navCartCount">0</span></a>
+        <a href="checkout.html">Checkout</a>
+        <a href="admin.html">Admin Portal</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="page-hero success-hero">
+        <p class="eyebrow">Order Confirmation</p>
+        <h1>Thank You for Your Order!</h1>
+        <p class="page-hero-copy">Your order has been submitted successfully. Please keep this confirmation for pickup from BGBAZAAR Office.</p>
+      </section>
+
+      <section class="section order-print-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Order Details</p>
+            <h2>Order Placed Successfully</h2>
+          </div>
+        </div>
+
+        <div id="orderSuccessContent" class="order-success-card">
+          <div class="order-reference">
+            <p>Order Reference Number</p>
+            <h3 id="successOrderNumber">-</h3>
+          </div>
+
+          <div class="order-detail-grid">
+            <div class="order-detail-box">
+              <h4>Pickup Point</h4>
+              <p id="successAddress">-</p>
+            </div>
+            <div class="order-detail-box">
+              <h4>Contact Information</h4>
+              <p><strong id="successName">-</strong></p>
+              <p id="successMobile">-</p>
+              <p id="successEmail">-</p>
+            </div>
+          </div>
+
+          <div class="order-items-box">
+            <h4>Order Items</h4>
+            <div id="successItems" class="success-items"></div>
+          </div>
+
+          <div class="order-total-grid">
+            <div>
+              <p>Order Total</p>
+              <strong id="successTotal">-</strong>
+            </div>
+            <div>
+              <p>Transaction ID / UTR</p>
+              <strong id="successUtr">-</strong>
+            </div>
+          </div>
+
+          <div class="print-hide support-card">
+            <h4>Need Help?</h4>
+            <p>Contact us: <a href="tel:9117138483">9117138483</a> or <a href="mailto:amaresh.r2030i@iimbg.ac.in">amaresh.r2030i@iimbg.ac.in</a></p>
+          </div>
+
+          <div class="print-hide order-success-actions">
+            <a class="primary-link" href="index.html">Continue Shopping</a>
+            <a class="secondary-link light" href="#" id="printOrderBtn">Print Order</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js" type="module"></script>
+    <script>
+      function escapeHtml(value) {
+        return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+      }
+      function money(value) {
+        return `Rs. ${Number(value).toLocaleString("en-IN")}`;
+      }
+
+      function displayOrderSuccess() {
+        const orderData = sessionStorage.getItem("bgbazaar_last_order");
+        const productsData = localStorage.getItem("bgbazaar_products");
+        const products = productsData ? JSON.parse(productsData) : [];
+        
+        if (!orderData) {
+          document.getElementById('orderSuccessContent').innerHTML = '<div class="empty">No order found. <a href="checkout.html">Return to checkout</a></div>';
+          return;
+        }
+
+        const lastOrder = JSON.parse(orderData);
+        const orderTotal = Number(lastOrder.totalAmount || 0);
+
+        document.getElementById('successOrderNumber').textContent = lastOrder.orderNumber || '-';
+        document.getElementById('successName').textContent = lastOrder.buyerName || '-';
+        document.getElementById('successMobile').textContent = lastOrder.mobileNumber ? 'Mobile: ' + lastOrder.mobileNumber : '-';
+        document.getElementById('successEmail').textContent = lastOrder.emailAddress ? 'Email: ' + lastOrder.emailAddress : '-';
+        document.getElementById('successAddress').textContent = lastOrder.deliveryLocation || 'BgBazaar Office';
+        document.getElementById('successTotal').textContent = money(orderTotal);
+        document.getElementById('successUtr').textContent = lastOrder.utrNumber || '-';
+
+        const itemsHtml = (lastOrder.items || []).map(item => {
+          return `
+          <div class="success-item-row">
+            <div>
+              <p>${escapeHtml(item.name)}</p>
+              <span>Qty: ${item.quantity} × ${money(item.unitPrice)}</span>
+            </div>
+            <strong>${money(item.subtotal || (item.unitPrice * item.quantity))}</strong>
+          </div>
+          `;
+        }).join('');
+        document.getElementById('successItems').innerHTML = itemsHtml || '<p class="muted">No items</p>';
+
+        document.getElementById('printOrderBtn').addEventListener('click', () => window.print());
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', displayOrderSuccess);
+      } else {
+        displayOrderSuccess();
+      }
+    </script>
+  </body>
+</html>

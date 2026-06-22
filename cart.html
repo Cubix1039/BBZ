@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover">
+    <meta name="description" content="BG BAZAAR Shopping Cart - Review your items, update quantities, and proceed to secure checkout.">
+    <meta name="theme-color" content="#0797a8">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>BG BAZAAR | Shopping Cart</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="index.html" aria-label="BG BAZAAR home">
+        <img id="siteLogo" alt="BG BAZAAR logo" src="assets/bg-bazaar-logo.jpeg">
+        <span id="siteName">BG BAZAAR</span>
+      </a>
+      <nav aria-label="Main navigation">
+        <a href="index.html">Home</a>
+        <a href="cart.html" aria-current="page">Cart <span id="navCartCount">0</span></a>
+        <a href="checkout.html">Checkout</a>
+        <a href="admin.html">Admin Portal</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="page-hero cart-hero">
+        <p class="eyebrow">Shopping Cart</p>
+        <h1>Review Your Items</h1>
+        <p class="page-hero-copy">Check your selected products, update quantities, and proceed to secure checkout.</p>
+      </section>
+
+      <section class="section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Cart Summary</p>
+            <h2>Items in Your Cart</h2>
+          </div>
+          <button id="clearCartBtn" class="ghost-btn" type="button">Clear Cart</button>
+        </div>
+        <div id="cartList" class="cart-list" aria-live="polite"></div>
+        <div class="cart-total">
+          <span>Total Amount</span>
+          <strong id="cartTotal">Rs. 0</strong>
+        </div>
+        <div class="page-actions">
+          <a class="secondary-link light" href="index.html">Continue Shopping</a>
+          <a class="primary-link" href="checkout.html">Proceed to Checkout</a>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>

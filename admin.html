@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover">
+    <meta name="description" content="BG BAZAAR Admin Portal - Manage products, categories, orders, inventory, and payments.">
+    <meta name="theme-color" content="#0797a8">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>BG BAZAAR | Admin Portal</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="index.html" aria-label="BG BAZAAR home">
+        <img id="siteLogo" alt="BG BAZAAR logo" src="assets/bg-bazaar-logo.jpeg">
+        <span id="siteName">BG BAZAAR</span>
+      </a>
+      <nav aria-label="Main navigation">
+        <a href="index.html">Home</a>
+        <a href="cart.html">Cart <span id="navCartCount">0</span></a>
+        <a href="checkout.html">Checkout</a>
+        <a href="admin.html" aria-current="page">Admin Portal</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="section admin-section">
+        <div class="section-heading admin-workspace-heading">
+          <div>
+            <p class="eyebrow">Secure Administration</p>
+            <h2>Management Workspace</h2>
+          </div>
+          <button id="logoutBtn" class="ghost-btn hidden" type="button">Logout</button>
+        </div>
+
+        <form id="loginForm" class="login-panel admin-login-card">
+          <div class="login-card-header">
+            <p class="eyebrow">Authorized Access</p>
+            <h3>Staff Sign In</h3>
+            <p>Enter your administrator credentials to manage marketplace operations.</p>
+          </div>
+          <label>
+            <span>Username</span>
+            <input name="username" type="text" autocomplete="username" required>
+          </label>
+          <label>
+            <span>Password</span>
+            <input name="password" type="password" autocomplete="current-password" required>
+          </label>
+          <button class="primary-btn" type="submit">Open Dashboard</button>
+          <p id="loginMessage" class="message error" role="status"></p>
+        </form>
+
+        <div id="adminDashboard" class="hidden">
+          <div class="admin-shell">
+            <aside class="admin-sidebar" aria-label="Admin menu">
+              <div class="sidebar-title">
+                <span>Admin Menu</span>
+                <strong>Workspace</strong>
+              </div>
+              <nav class="admin-tabs">
+                <a href="#dashboardOverview" data-admin-tab="dashboardOverview" aria-current="page">Performance Overview</a>
+                <a href="#paymentSetup" data-admin-tab="paymentSetup">Brand & Contact</a>
+                <a href="#settingsSetup" data-admin-tab="settingsSetup">Payment Configuration</a>
+                <a href="#categorySetup" data-admin-tab="categorySetup">Category Management</a>
+                <a href="#productSetup" data-admin-tab="productSetup">Product Catalog</a>
+                <a href="#productListings" data-admin-tab="productListings">Product Listings</a>
+                <a href="#inventoryDash" data-admin-tab="inventoryDash">Inventory & Reports</a>
+                <a href="#orderHistory" data-admin-tab="orderHistory">Order Management</a>
+              </nav>
+            </aside>
+
+            <div class="admin-content">
+              <section id="dashboardOverview" class="admin-panel" data-admin-panel="dashboardOverview">
+                <div class="panel-heading">
+                  <p class="eyebrow">Operations Snapshot</p>
+                  <h3>Performance Overview</h3>
+                </div>
+                <div class="dashboard-grid">
+                  <div>
+                    <span id="totalProductsDash">0</span>
+                    <p>Total Products</p>
+                  </div>
+                  <div>
+                    <span id="activeProductsDash">0</span>
+                    <p>Active Products</p>
+                  </div>
+                  <div>
+                    <span id="totalOrdersDash">0</span>
+                    <p>Total Orders</p>
+                  </div>
+                  <div>
+                    <span id="pendingOrdersDash">0</span>
+                    <p>Pending Orders</p>
+                  </div>
+                  <div>
+                    <span id="completedOrdersDash">0</span>
+                    <p>Delivered Orders</p>
+                  </div>
+                  <div>
+                    <span id="revenueDash">Rs. 0</span>
+                    <p>Total Revenue</p>
+                  </div>
+                </div>
+                <div id="lowStockAlerts" class="alerts" aria-live="polite"></div>
+              </section>
+
+              <form id="brandingForm" class="admin-form admin-panel hidden" data-admin-panel="paymentSetup">
+                <h3 id="paymentSetup">Brand & Contact Details</h3>
+                <label>
+                  Website Name
+                  <input name="siteName" type="text" placeholder="BG BAZAAR" required>
+                </label>
+                <label>
+                  Logo Upload
+                  <input name="logoFile" type="file" accept=".jpg,.jpeg,.png,.svg,image/jpeg,image/png,image/svg+xml">
+                </label>
+                <div class="logo-preview-box">
+                  <img id="adminLogoPreview" alt="Current marketplace logo">
+                  <span>Current logo preview</span>
+                </div>
+                <label>
+                  Contact Number
+                  <input name="contactPhone" type="tel" placeholder="9117138483">
+                </label>
+                <label>
+                  Contact Email
+                  <input name="contactEmail" type="email" placeholder="amaresh.r2030i@iimbg.ac.in">
+                </label>
+                <button class="primary-btn" type="submit">Save Branding</button>
+              </form>
+
+              <form id="settingsForm" class="admin-form admin-panel hidden" data-admin-panel="settingsSetup">
+                <h3 id="settingsSetup">Payment Configuration</h3>
+                <label>
+                  UPI ID
+                  <input name="upiId" type="text" placeholder="payments@bgbazaar" required>
+                </label>
+                <label>
+                  Payment QR Code
+                  <input name="qrImage" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
+                  <small class="file-hint">Upload a clear JPG, PNG, or WebP image up to 12 MB.</small>
+                </label>
+                <div class="qr-preview-box">
+                  <img id="adminQrPreview" alt="Current payment QR code">
+                </div>
+                <label>
+                  Bank Details
+                  <textarea name="bankDetails" placeholder="Bank name, account holder, account number, IFSC, branch"></textarea>
+                </label>
+                <button class="primary-btn" type="submit">Save Payment Settings</button>
+              </form>
+
+              <section class="admin-panel hidden" data-admin-panel="categorySetup">
+                <div class="admin-layout">
+                  <form id="categoryForm" class="admin-form">
+                    <h3 id="categorySetup">Category Management</h3>
+                    <input type="hidden" name="categoryId">
+                    <label>
+                      Category Name
+                      <input name="categoryName" type="text" placeholder="e.g., Electronics, Fashion, Home" required>
+                    </label>
+                    <label>
+                      Category Description
+                      <textarea name="categoryDescription" placeholder="Brief description of this category"></textarea>
+                    </label>
+                    <div class="form-actions">
+                      <button class="primary-btn" type="submit" id="saveCategoryBtn">Add Category</button>
+                      <button id="resetCategoryBtn" class="ghost-btn" type="button">Reset</button>
+                    </div>
+                  </form>
+
+                  <div class="admin-form category-panel">
+                    <h4>Live Categories</h4>
+                    <div id="categoriesList"></div>
+                  </div>
+                </div>
+              </section>
+
+              <form id="productForm" class="admin-form admin-panel hidden" data-admin-panel="productSetup">
+                <h3 id="productSetup">Product Catalog</h3>
+                <input type="hidden" name="id">
+                <label>
+                  Product Name
+                  <input name="name" type="text" required>
+                </label>
+                <label>
+                  Description
+                  <textarea name="description" required></textarea>
+                </label>
+                <label>
+                  Category
+                  <select id="productCategorySelect" name="category" required>
+                    <option value="">Select a category</option>
+                  </select>
+                </label>
+                <label>
+                  Image URL
+                  <input name="image" type="url">
+                </label>
+                <div class="form-row">
+                  <label>
+                    Price (Rs.)
+                    <input name="price" type="number" min="1" step="1" required>
+                  </label>
+                  <label>
+                    Stock Quantity
+                    <input name="totalStock" type="number" min="0" step="1" required>
+                  </label>
+                </div>
+                <label class="inline-check">
+                  <input name="listed" type="checkbox" checked>
+                  <span>Show to Customers</span>
+                </label>
+                <label class="inline-check">
+                  <input name="showPublicQuantity" type="checkbox">
+                  <span>Show Quantity Publicly</span>
+                </label>
+                <div class="form-actions">
+                  <button class="primary-btn" type="submit">Save Product</button>
+                  <button id="resetFormBtn" class="ghost-btn" type="button">Reset</button>
+                </div>
+              </form>
+
+              <section id="productListings" class="admin-panel hidden" data-admin-panel="productListings">
+                <div class="panel-heading">
+                  <p class="eyebrow">Catalog Visibility</p>
+                  <h3>Product Listings</h3>
+                </div>
+                <div id="adminList" class="admin-list" aria-live="polite"></div>
+              </section>
+
+              <section id="inventoryDash" class="admin-panel hidden" data-admin-panel="inventoryDash">
+                <div class="management-grid report-grid">
+                  <section class="report-card">
+                    <h3>Inventory & Stock Health</h3>
+                    <div id="inventoryTable" class="table-wrap" aria-live="polite"></div>
+                  </section>
+                  <section class="report-card">
+                    <h3>Revenue Summary</h3>
+                    <div id="revenueTable" class="table-wrap" aria-live="polite"></div>
+                  </section>
+                </div>
+              </section>
+
+              <section id="orderHistory" class="admin-panel hidden" data-admin-panel="orderHistory">
+                <div class="panel-heading order-heading">
+                  <div>
+                    <p class="eyebrow">Customer Orders</p>
+                    <h3>Order Management</h3>
+                  </div>
+                  <div class="order-tools">
+                    <label class="order-search">
+                      <span>Search orders</span>
+                      <input id="orderSearchInput" type="search" placeholder="Order no, UTR, email, mobile, name">
+                    </label>
+                    <button id="downloadOrdersCsv" class="primary-btn" type="button">Download CSV</button>
+                  </div>
+                </div>
+                <div id="ordersList" class="orders-list" aria-live="polite"></div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
