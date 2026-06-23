@@ -1696,7 +1696,11 @@ try {
   const GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxWj9qFOi8s_avwd1YNku81LVVing5-eBDCRHJJZqU9AYpi4tt_T1_-ZyhKTwIgsVWBVw/exec"; 
 
   // 1. Convert your array items into a clean comma-separated list string
-const itemsSummary = previousCart.map(item => `${item.name} x ${item.quantity} @ Rs. ${item.price}`).join("; ");
+const itemsSummary = previousCart.map(item => {
+  const name = item.name || item.title || item.productName || "Item";
+  const price = item.price || item.cost || item.rate || 0;
+  return `${name} x ${item.quantity || 1} @ Rs. ${price}`;
+}).join("; ");
 
   // 2. Generate a perfectly balanced CSV row matching your Sheet headers
   const csvRow = `"${savedOrder.orderNumber}","${new Date().toLocaleString("en-IN")}","${savedOrder.buyerName || ""}","${savedOrder.mobileNumber || ""}","${savedOrder.emailAddress || ""}","${savedOrder.deliveryPointAddress || savedOrder.deliveryLocation || ""}","${itemsSummary}","${savedOrder.totalAmount || ""}","Pending","${savedOrder.utrNumber || ""}","${savedOrder.orderNumber}.jpg","${new Date().toLocaleString("en-IN")}"\n`;
