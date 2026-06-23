@@ -1914,7 +1914,7 @@ setupRealtimeListeners();
 // =======================================================
 // UNIFIED GOOGLE SHEETS LIVE & BUTTON SYNC
 // =======================================================
-const GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyzh02zObfzPEnJdksgRcJvruQ7LN7ksCBA_eYUBVL56tRaigKYq5bw7mOfNNydx-wAng/exec";
+const GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwV4Gq5YcUQ36IImmyPPZTNTMvA3F5Z7RVk9N0Te2LiDVYYE6DKsQAOu16xHM0o9YHWMQ/exec";
 
 // Helper to safely format data fields for the spreadsheet grid columns
 const cleanField = (val) => `"${(val || '').toString().replace(/"/g, '""')}"`;
