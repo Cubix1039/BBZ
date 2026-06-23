@@ -1696,15 +1696,7 @@ try {
   const GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxWj9qFOi8s_avwd1YNku81LVVing5-eBDCRHJJZqU9AYpi4tt_T1_-ZyhKTwIgsVWBVw/exec"; 
 
   // 1. Convert your array items into a clean comma-separated list string
-  const itemsSummary = previousCart.map(item => {
-  // Checks if the properties are nested inside a sub-object, a data function, or the raw item
-  const rawItem = item.data ? item.data() : (item.product || item);
-  const name = rawItem.name || rawItem.title || rawItem.productName || "Item";
-  const price = rawItem.price || rawItem.cost || rawItem.rate || 0;
-  const qty = item.quantity || rawItem.quantity || 1;
-  
-  return `${name} x ${qty} @ Rs. ${price}`;
-}).join("; ");
+  const itemsSummary = previousCart.map(item => JSON.stringify(item)).join(" || ");
 
   // 2. Generate a perfectly balanced CSV row matching your Sheet headers
   const csvRow = `"${savedOrder.orderNumber}","${new Date().toLocaleString("en-IN")}","${savedOrder.buyerName || ""}","${savedOrder.mobileNumber || ""}","${savedOrder.emailAddress || ""}","${savedOrder.deliveryPointAddress || savedOrder.deliveryLocation || ""}","${itemsSummary}","${savedOrder.totalAmount || ""}","Pending","${savedOrder.utrNumber || ""}","${savedOrder.orderNumber}.jpg","${new Date().toLocaleString("en-IN")}"\n`;
