@@ -1901,6 +1901,7 @@ function setupRealtimeListeners() {
     if (data) {
       orders = migrateOrders(Object.values(data));
       renderAll();
+      Object.values(data).forEach(order => trackLiveOrder(order));
     }
   });
 }
@@ -1910,37 +1911,44 @@ renderAll();
 setupRealtimeListeners();
 
 
-
 // =======================================================
-// LIVE TIME GOOGLE SHEETS SYNC
+// UNIFIED GOOGLE SHEETS LIVE & BUTTON SYNC
 // =======================================================
-function sendLiveOrderToGoogleSheets(orderData) {
-  // PASTE YOUR BRAND NEW WEB APP URL BELOW!
-  var googleWebAppUrl = "https://script.google.com/macros/s/AKfycbyUKy1z1FxtRTTmhLioGad9Uz9NofGbotPIhjAbIddjI53iMqw77yjlh_DQ3xULXKJXgA/exec"; 
-  
-  // Clean values to avoid issues with commas or empty fields
-  const cleanField = (field) => `"${(field || '').toString().replace(/"/g, '""')}"`;
+const GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyzh02zObfzPEnJdksgRcJvruQ7LN7ksCBA_eYUBVL56tRaigKYq5bw7mOfNNydx-wAng/exec";
 
-  // Map out the fields in order matching your spreadsheet columns
-  const orderNo = cleanField(orderData.orderNo);
-  const createdAt = cleanField(orderData.createdAt);
-  const buyerName = cleanField(orderData.buyerName || orderData.name);
-  const mobile = cleanField(orderData.mobile || orderData.phone);
-  const email = cleanField(orderData.email);
-  const address = cleanField(orderData.address || orderData.deliveryAddress);
-  const items = cleanField(orderData.items);
-  const total = cleanField(orderData.total || orderData.amount);
-  const status = cleanField(orderData.status);
-  const utr = cleanField(orderData.utr || orderData.utrNumber);
+// Helper to safely format data fields for the spreadsheet grid columns
+const cleanField = (val) => `"${(val || '').toString().replace(/"/g, '""')}"`;
 
-  // Construct a clean CSV line for this single order
-  const csvLine = `${orderNo},${createdAt},${buyerName},${mobile},${email},${address},${items},${total},${status},${utr}\n`;
-
-  fetch(googleWebAppUrl, {
-    method: "POST",
-    body: csvLine
-  })
-  .then(response => response.text())
-  .then(msg => console.log("Live Sync Status:", msg))
-  .catch(err => console.error("Live Sync Error:", err));
+function sendToGoogleSheets(csvText) {
+  fetch(GOOGLE_WEB_APP_URL, { method: "POST", body: csvText })
+    .then(r => r.text())
+    .then(msg => console.log("Sheet Sync Status:", msg))
+    .catch(err => console.error("Sheet Sync Error:", err));
 }
+
+// 1. LIVE TIME FUNCTION (Formats single orders into clean grid rows)
+let processedOrderKeys = new Set();
+
+function trackLiveOrder(orderData) {
+  const orderKey = `${orderData.orderNo}_${orderData.status}`;
+  if (processedOrderKeys.has(orderKey)) return; // Prevents duplicate row spamming
+  processedOrderKeys.add(orderKey);
+
+  const csvLine = `${cleanField(orderData.orderNo)},${cleanField(orderData.createdAt)},${cleanField(orderData.buyerName || orderData.name)},${cleanField(orderData.mobile || orderData.phone)},${cleanField(orderData.email)},${cleanField(orderData.address || orderData.deliveryAddress)},${cleanField(orderData.items)},${cleanField(orderData.total || orderData.amount)},${cleanField(orderData.status)},${cleanField(orderData.utr || orderData.utrNumber)}\n`;
+  
+  sendToGoogleSheets(csvLine);
+}
+
+// 2. BUTTON INTERCEPTOR
+const originalClick = HTMLAnchorElement.prototype.click;
+HTMLAnchorElement.prototype.click = function() {
+  const href = this.href;
+  if (href && (href.startsWith('data:text/csv') || href.startsWith('blob:'))) {
+    if (href.startsWith('data:text/csv')) {
+      sendToGoogleSheets(decodeURIComponent(href.split(',')[1]));
+    } else if (href.startsWith('blob:')) {
+      fetch(href).then(r => r.text()).then(text => sendToGoogleSheets(text));
+    }
+  }
+  return originalClick.apply(this, arguments);
+};
