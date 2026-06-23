@@ -1696,11 +1696,14 @@ try {
   const GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxWj9qFOi8s_avwd1YNku81LVVing5-eBDCRHJJZqU9AYpi4tt_T1_-ZyhKTwIgsVWBVw/exec"; 
 
   // 1. Convert your array items into a clean comma-separated list string
-  console.log("DEBUGGING CART OBJECT:", previousCart);
-const itemsSummary = previousCart.map(item => {
-  const name = item.name || item.title || item.productName || "Item";
-  const price = item.price || item.cost || item.rate || 0;
-  return `${name} x ${item.quantity || 1} @ Rs. ${price}`;
+  const itemsSummary = previousCart.map(item => {
+  // Checks if the properties are nested inside a sub-object, a data function, or the raw item
+  const rawItem = item.data ? item.data() : (item.product || item);
+  const name = rawItem.name || rawItem.title || rawItem.productName || "Item";
+  const price = rawItem.price || rawItem.cost || rawItem.rate || 0;
+  const qty = item.quantity || rawItem.quantity || 1;
+  
+  return `${name} x ${qty} @ Rs. ${price}`;
 }).join("; ");
 
   // 2. Generate a perfectly balanced CSV row matching your Sheet headers
