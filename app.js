@@ -3,8 +3,6 @@ import { auth, db, ref, set, get, child, remove, onValue, update, push, signInWi
 const ADMIN_USERNAME = "amaresh@bgbazaar.com";
 const ADMIN_PASSWORD = "amareshraj@1321";
 
-const GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz_T2L3EwFpU1Riz9Yg94OayYQy8oE_3_H_bNqFv8FfIbeA21fepmK0xG9zU0xG9zU/exec"; // Replace with your latest Apps Script Deploy Web App URL
-
 const LOW_STOCK_THRESHOLD = 5;
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
 const MAX_PDF_BYTES = 1.5 * 1024 * 1024;
@@ -487,25 +485,12 @@ function buildOrdersCsv() {
   return [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
 }
 
-function sendToGoogleSheets(csvText) {
-  fetch(GOOGLE_WEB_APP_URL, {
-    method: "POST",
-    body: csvText
-  })
-  .then(r => r.text())
-  .then(m => console.log("Sheet Sync Status:", m))
-  .catch(e => console.error("Sheet Sync Error:", e));
-}
-
 function downloadOrdersCsv() {
   if (!orders.length) {
     alert("No orders available to export.");
     return;
   }
-  const csvData = buildOrdersCsv();
-  sendToGoogleSheets(csvData);
-
-  const blob = new Blob([csvData], { type: "text/csv;charset=utf-8" });
+  const blob = new Blob([buildOrdersCsv()], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -698,10 +683,10 @@ function renderUserStatus() {
 }
 
 function fillCheckoutForm() {
-  const buyerNameInput = $("#buyerName") || document.getElementsByName("buyerName")[0];
-  const phoneInput = $("#phone") || document.getElementsByName("phone")[0];
-  const emailInput = $("#email") || document.getElementsByName("email")[0];
-  const locationInput = $("#location") || document.getElementsByName("location")[0];
+  const buyerNameInput = $("#buyerName");
+  const phoneInput = $("#phone");
+  const emailInput = $("#email");
+  const locationInput = $("#location");
 
   if (locationInput) locationInput.value = DELIVERY_POINT_ADDRESS;
   
@@ -889,76 +874,1081 @@ function renderCart() {
           )
           .join("")}
       `
-      : `<div class="empty">Your cart is empty. Add items before checking out.</div>`;
+      : `<div class="empty">Your cart is empty. Add items before payment submission.</div>`;
+  }
+
+  const upiQr = $("#upiQr");
+  const upiLabel = $("#upiLabel");
+  const bankDetailsBox = $("#bankDetailsBox");
+  if (upiQr) {
+    upiQr.src = settings.qrImage || DEFAULT_LOGO;
+  }
+  if (upiLabel) upiLabel.textContent = `${settings.upiId} - ${money(cartTotal())}`;
+  if (bankDetailsBox) {
+    bankDetailsBox.innerHTML = `
+      <h4>Bank details</h4>
+      <p>${escapeHtml(settings.bankDetails).replaceAll("\n", "<br>")}</p>
+    `;
+  }
+  fillCheckoutForm();
+}
+
+function renderAuth() {
+  const loginForm = $("#loginForm");
+  const adminDashboard = $("#adminDashboard");
+  const logoutBtn = $("#logoutBtn");
+  if (!loginForm || !adminDashboard) return;
+  loginForm.classList.toggle("hidden", isAdminLoggedIn);
+  adminDashboard.classList.toggle("hidden", !isAdminLoggedIn);
+  logoutBtn?.classList.toggle("hidden", !isAdminLoggedIn);
+}
+
+function showAdminPanel(panelId = "dashboardOverview") {
+  const panels = $$("[data-admin-panel]");
+  const tabs = $$("[data-admin-tab]");
+  if (!panels.length) return;
+
+  const targetPanel = panels.some((panel) => panel.dataset.adminPanel === panelId)
+    ? panelId
+    : "dashboardOverview";
+  activeAdminPanel = targetPanel;
+
+  panels.forEach((panel) => {
+    panel.classList.toggle("hidden", panel.dataset.adminPanel !== targetPanel);
+  });
+  tabs.forEach((tab) => {
+    const isActive = tab.dataset.adminTab === targetPanel;
+    tab.classList.toggle("active", isActive);
+    if (isActive) {
+      tab.setAttribute("aria-current", "page");
+    } else {
+      tab.removeAttribute("aria-current");
+    }
+  });
+}
+
+function renderAdmin() {
+  const adminList = $("#adminList");
+  if (!adminList || !isAdminLoggedIn) return;
+
+  adminList.innerHTML = products.length
+    ? products
+        .map((item) => {
+          const remaining = remainingStock(item);
+          return `
+          <article class="admin-item">
+            <div>
+              <strong>${escapeHtml(item.name)}</strong>
+              <p class="muted">${escapeHtml(item.category)} - ${money(item.price)}</p>
+              <p class="muted">Total ${item.totalStock}, sold ${item.soldQuantity}, remaining ${remaining}</p>
+              <span class="status-pill ${item.listed ? "" : "hidden"}">${item.listed ? "Listed" : "Unlisted"}</span>
+              <span class="status-pill ${item.showPublicQuantity ? "" : "pending"}">${item.showPublicQuantity ? "Quantity Public" : "Quantity Hidden"}</span>
+              <span class="status-pill ${remaining === 0 ? "cancelled" : remaining <= LOW_STOCK_THRESHOLD ? "pending" : ""}">${stockStatus(item)}</span>
+            </div>
+            <div class="admin-controls">
+              <button class="ghost-btn" type="button" data-edit="${item.id}">Edit</button>
+              <button class="ghost-btn" type="button" data-toggle="${item.id}">${item.listed ? "Unlist" : "List"}</button>
+              <button class="danger-btn" type="button" data-delete="${item.id}">Delete</button>
+            </div>
+          </article>
+        `;
+        })
+        .join("")
+    : `<div class="empty">No products yet.</div>`;
+}
+
+function renderDashboard() {
+  const totalProductsDash = $("#totalProductsDash");
+  if (!totalProductsDash || !isAdminLoggedIn) return;
+
+  const activeProducts = products.filter((item) => item.listed).length;
+  const completedOrders = orders.filter(isDeliveredOrder);
+  const pendingOrders = orders.filter((order) => !isDeliveredOrder(order) && order.status !== "Cancelled");
+  const revenue = completedOrders.reduce((sum, order) => sum + orderTotal(order), 0);
+
+  totalProductsDash.textContent = products.length;
+  $("#activeProductsDash").textContent = activeProducts;
+  $("#totalOrdersDash").textContent = orders.length;
+  $("#pendingOrdersDash").textContent = pendingOrders.length;
+  $("#completedOrdersDash").textContent = completedOrders.length;
+  $("#revenueDash").textContent = money(revenue);
+
+  renderLowStockAlerts();
+  renderInventoryTable();
+  renderRevenueTable();
+}
+
+function renderLowStockAlerts() {
+  const lowStockAlerts = $("#lowStockAlerts");
+  if (!lowStockAlerts) return;
+  const lowProducts = products.filter((item) => item.listed && remainingStock(item) <= LOW_STOCK_THRESHOLD);
+  lowStockAlerts.innerHTML = lowProducts.length
+    ? lowProducts
+        .map(
+          (item) =>
+            `<div class="alert-row"><strong>${escapeHtml(item.name)}</strong> is ${stockStatus(item).toLowerCase()} with ${remainingStock(item)} units left.</div>`
+        )
+        .join("")
+    : `<div class="muted">No low-stock alerts. Threshold is ${LOW_STOCK_THRESHOLD} units.</div>`;
+}
+
+function renderInventoryTable() {
+  const inventoryTable = $("#inventoryTable");
+  if (!inventoryTable) return;
+  inventoryTable.innerHTML = `
+    <table>
+      <thead>
+        <tr><th>Product</th><th>Price</th><th>Total stock</th><th>Sold</th><th>Remaining</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        ${products
+          .map(
+            (item) => `
+          <tr>
+            <td>${escapeHtml(item.name)}</td>
+            <td>${money(item.price)}</td>
+            <td>${item.totalStock}</td>
+            <td>${item.soldQuantity}</td>
+            <td>${remainingStock(item)}</td>
+            <td>${stockStatus(item)}</td>
+          </tr>
+        `
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function sumRevenue(days) {
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  return orders
+    .filter((order) => isDeliveredOrder(order) && new Date(order.createdAt).getTime() >= cutoff)
+    .reduce((sum, order) => sum + orderTotal(order), 0);
+}
+
+function renderRevenueTable() {
+  const revenueTable = $("#revenueTable");
+  if (!revenueTable) return;
+  const total = orders
+    .filter(isDeliveredOrder)
+    .reduce((sum, order) => sum + orderTotal(order), 0);
+  revenueTable.innerHTML = `
+    <table>
+      <thead><tr><th>Period</th><th>Revenue</th></tr></thead>
+      <tbody>
+        <tr><td>Daily</td><td>${money(sumRevenue(1))}</td></tr>
+        <tr><td>Weekly</td><td>${money(sumRevenue(7))}</td></tr>
+        <tr><td>Monthly</td><td>${money(sumRevenue(30))}</td></tr>
+        <tr><td>Total</td><td>${money(total)}</td></tr>
+      </tbody>
+    </table>
+  `;
+}
+
+function renderOrders() {
+  const ordersList = $("#ordersList");
+  if (!ordersList || !isAdminLoggedIn) return;
+  const query = ($("#orderSearchInput")?.value || "").trim().toLowerCase();
+  const visibleOrders = orders.filter((order) => {
+    if (!query) return true;
+    const searchable = [
+      order.orderNumber,
+      order.utrNumber,
+      order.emailAddress,
+      order.mobileNumber,
+      order.buyerName,
+      ...(order.items || []).map((item) => item.name)
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return searchable.includes(query);
+  });
+
+  ordersList.innerHTML = visibleOrders.length
+    ? visibleOrders
+        .slice()
+        .reverse()
+        .map((order) => {
+          const proofLabel = order.paymentProofType === "application/pdf" ? "Open PDF proof" : "Open screenshot";
+          const hasProofData = order.paymentProofData && order.paymentProofData !== "#";
+          const downloadName = escapeHtml(order.paymentProofName || proofFileName(order.orderNumber, order.paymentProofType));
+          const proofPreview = !hasProofData
+            ? `<p class="muted">No payment proof uploaded.</p>`
+            : isImageProof(order)
+            ? `<div class="proof-card">
+                <p class="muted">Payment screenshot uploaded. Use the actions below to view or download it.</p>
+                <div class="proof-actions">
+                  <button class="proof-preview" type="button" data-proof-open="${escapeHtml(order.id)}">Open screenshot</button>
+                  <a class="proof-preview" href="${escapeHtml(order.paymentProofData)}" download="${downloadName}">Download proof</a>
+                </div>
+              </div>`
+            : `<div class="proof-actions">
+                <button class="proof-preview" type="button" data-proof-open="${escapeHtml(order.id)}">${proofLabel}</button>
+                <a class="proof-preview" href="${escapeHtml(order.paymentProofData)}" download="${downloadName}">Download proof</a>
+              </div>`;
+          return `
+          <article class="order-item">
+            <div class="order-actions">
+              <div>
+                <strong>${escapeHtml(order.orderNumber)}</strong>
+                <p class="muted">${escapeHtml(new Date(order.createdAt).toLocaleString("en-IN"))}</p>
+              </div>
+              <span class="status-pill ${order.status === "Cancelled" ? "cancelled" : order.status === "Payment Submitted" ? "pending" : ""}">${escapeHtml(order.status)}</span>
+            </div>
+            <div class="order-grid">
+              <div>
+                <p><strong>Buyer:</strong> ${escapeHtml(order.buyerName)}</p>
+                <p><strong>Mobile:</strong> ${escapeHtml(order.mobileNumber)}</p>
+                <p><strong>Email:</strong> ${escapeHtml(order.emailAddress)}</p>
+                <p><strong>Delivery Point Address:</strong> ${escapeHtml(order.deliveryLocation || DELIVERY_POINT_ADDRESS)}</p>
+              </div>
+              <div>
+                <p><strong>Total:</strong> ${money(orderTotal(order))}</p>
+                <p><strong>UTR:</strong> ${escapeHtml(order.utrNumber || "Not provided")}</p>
+                ${proofPreview}
+              </div>
+            </div>
+            <p class="muted">${order.items
+              .map((item) => `${escapeHtml(item.name)} x ${item.quantity} @ ${money(item.unitPrice)}`)
+              .join(", ")}</p>
+            <div class="order-actions">
+              <label>
+                Order status
+                <select data-order-status="${order.id}">
+                  ${ORDER_STATUSES.map(
+                    (status) =>
+                      `<option value="${status}" ${status === order.status ? "selected" : ""}>${status}</option>`
+                  ).join("")}
+                </select>
+              </label>
+              <button class="ghost-btn" type="button" data-print-order="${escapeHtml(order.id)}">Print Order Details</button>
+              <button class="danger-btn" type="button" data-delete-order="${escapeHtml(order.id)}">Delete Order</button>
+            </div>
+          </article>
+        `;
+        })
+        .join("")
+    : `<div class="empty">${orders.length ? "No orders match your search." : "No orders have been submitted."}</div>`;
+}
+
+function renderBrandingForm() {
+  const brandingForm = $("#brandingForm");
+  const settingsForm = $("#settingsForm");
+  
+  if (brandingForm) {
+    brandingForm.elements.siteName.value = settings.siteName;
+    brandingForm.elements.contactPhone.value = settings.contactPhone;
+    brandingForm.elements.contactEmail.value = settings.contactEmail;
+    const logoPreview = $("#adminLogoPreview");
+    if (logoPreview) logoPreview.src = settings.logoUrl || DEFAULT_LOGO;
+  }
+  
+  if (settingsForm) {
+    settingsForm.elements.upiId.value = settings.upiId;
+    settingsForm.elements.bankDetails.value = settings.bankDetails;
+    const preview = $("#adminQrPreview");
+    if (preview) preview.src = settings.qrImage || DEFAULT_LOGO;
   }
 }
 
 function renderAll() {
   renderShared();
+  renderUserStatus();
   renderFilters();
-  renderCategories();
   renderShop();
   renderCart();
-  renderUserStatus();
+  renderAuth();
+  showAdminPanel(activeAdminPanel);
+  renderBrandingForm();
+  renderCategories();
+  renderAdmin();
+  renderOrders();
+  renderDashboard();
+  renderUserOrders();
+  save();
 }
 
-// Global initialization logic block
-document.addEventListener("DOMContentLoaded", () => {
+function renderUserOrders() {
+  const userOrderHistory = $("#userOrderHistory");
+  const userOrdersList = $("#userOrdersList");
+  
+  if (!userOrderHistory || !userOrdersList) return;
+  
+  if (isUserLoggedIn && currentUser && currentUser.email) {
+    const userOrders = orders.filter(order => order.emailAddress === currentUser.email);
+    userOrderHistory.classList.remove("hidden");
+    
+    userOrdersList.innerHTML = userOrders.length
+      ? userOrders.slice().reverse().map(order => {
+          const itemsSummary = (order.items || []).map(item => escapeHtml(item.name)).join(", ");
+          return `
+            <div style="padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: #fff;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                <strong>${escapeHtml(order.orderNumber)}</strong>
+                <span class="status-pill ${order.status === "Cancelled" ? "cancelled" : order.status === "Payment Submitted" ? "pending" : ""}">${escapeHtml(order.status)}</span>
+              </div>
+              <p style="margin: 4px 0; font-size: 14px;">${itemsSummary}</p>
+              <p style="margin: 4px 0; color: var(--brand); font-weight: 600;">${money(orderTotal(order))}</p>
+              <p style="margin: 4px 0 0; font-size: 12px; color: var(--muted);">${new Date(order.createdAt).toLocaleString("en-IN")}</p>
+            </div>
+          `;
+        }).join("")
+      : `<div class="muted">No past orders found.</div>`;
+  } else {
+    userOrderHistory.classList.add("hidden");
+  }
+}
+
+async function addToCart(id) {
+  const product = products.find((item) => item.id === id);
+  if (!product || remainingStock(product) < 1) return;
+  const existing = cart.find((item) => item.id === id);
+  if (existing) {
+    existing.quantity = Math.min(existing.quantity + 1, remainingStock(product));
+  } else {
+    cart.push({ id, quantity: 1 });
+  }
+  if (isUserLoggedIn && currentUser) await syncCartToFirebase();
   renderAll();
-  fillCheckoutForm();
+}
 
-  // -------------------------------------------------------------
-  // REAL-TIME AUTO CHECKOUT ATTACHMENT HOOK
-  // -------------------------------------------------------------
-  const checkoutForm = document.getElementById("paymentForm");
-  if (checkoutForm) {
-    checkoutForm.addEventListener("submit", async (e) => {
-      // Allow form validation checking before firing background hook
-      if (!checkoutForm.checkValidity()) return;
+async function changeCartQuantity(id, amount) {
+  const product = products.find((item) => item.id === id);
+  const existing = cart.find((item) => item.id === id);
+  if (!product || !existing) return;
+  existing.quantity += amount;
+  if (existing.quantity <= 0) {
+    cart = cart.filter((item) => item.id !== id);
+  } else {
+    existing.quantity = Math.min(existing.quantity, remainingStock(product));
+  }
+  if (isUserLoggedIn && currentUser) await syncCartToFirebase();
+  renderAll();
+}
 
+function fillProductForm(id) {
+  const productForm = $("#productForm");
+  const item = products.find((product) => product.id === id);
+  if (!productForm || !item) return;
+  productForm.elements.id.value = item.id;
+  productForm.elements.name.value = item.name;
+  productForm.elements.description.value = item.description;
+  renderProductCategorySelect(item.category);
+  productForm.elements.category.value = item.category;
+  productForm.elements.image.value = item.image;
+  productForm.elements.price.value = item.price;
+  productForm.elements.totalStock.value = item.totalStock;
+  productForm.elements.listed.checked = item.listed;
+  productForm.elements.showPublicQuantity.checked = item.showPublicQuantity === true;
+  showAdminPanel("productSetup");
+  productForm.elements.name.focus();
+}
+
+function resetProductForm() {
+  const productForm = $("#productForm");
+  if (!productForm) return;
+  productForm.reset();
+  productForm.elements.id.value = "";
+  productForm.elements.listed.checked = true;
+  productForm.elements.showPublicQuantity.checked = false;
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImageFile(file) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("The selected image could not be read."));
+    };
+    image.src = objectUrl;
+  });
+}
+
+async function optimizeImageFile(file, maxDimension, quality = 0.78, outputType = "image/jpeg") {
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error("Image is too large. Choose a file smaller than 12 MB.");
+  }
+
+  const image = await loadImageFile(file);
+  const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Image processing is not supported in this browser.");
+  context.drawImage(image, 0, 0, width, height);
+  return canvas.toDataURL(outputType, quality);
+}
+
+async function prepareProofData(file) {
+  const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+  if (isPdf) {
+    if (file.size > MAX_PDF_BYTES) {
+      throw new Error("PDF payment proof must be smaller than 1.5 MB.");
+    }
+    return fileToDataUrl(file);
+  }
+  return optimizeImageFile(file, 1400, 0.76);
+}
+
+function attachEvents() {
+  $(".admin-tabs")?.addEventListener("click", (event) => {
+    const tab = event.target.closest("[data-admin-tab]");
+    if (!tab) return;
+    event.preventDefault();
+    showAdminPanel(tab.dataset.adminTab);
+  });
+
+  $("#productGrid")?.addEventListener("click", async (event) => {
+    const id = event.target.dataset.add;
+    const cardPlus = event.target.dataset.cardPlus;
+    const cardMinus = event.target.dataset.cardMinus;
+    if (id) await addToCart(id);
+    if (cardPlus) await changeCartQuantity(cardPlus, 1);
+    if (cardMinus) await changeCartQuantity(cardMinus, -1);
+  });
+
+  $("#cartList")?.addEventListener("click", async (event) => {
+    const { plus, minus, remove } = event.target.dataset;
+    if (plus) {
+      await changeCartQuantity(plus, 1);
+    }
+    if (minus) {
+      await changeCartQuantity(minus, -1);
+    }
+    if (remove) {
+      cart = cart.filter((item) => item.id !== remove);
+      if (isUserLoggedIn && currentUser) await syncCartToFirebase();
+      renderAll();
+    }
+  });
+
+  $("#adminList")?.addEventListener("click", async (event) => {
+    const { edit, toggle, delete: deleteId } = event.target.dataset;
+    if (edit) fillProductForm(edit);
+    if (toggle) {
+      const item = products.find((product) => product.id === toggle);
+      if (!item) return;
+      const previousListed = item.listed;
+      item.listed = !item.listed;
       try {
-        const clean = (val) => `"${(val || '').toString().replace(/"/g, '""')}"`;
-        const fData = new FormData(checkoutForm);
-
-        // Map cart structural strings for product summaries
-        const itemsSummaryString = getCartRows()
-          .map((r) => `${r.product.name} x ${r.quantity} @ ${money(r.product.price)}`)
-          .join("; ");
-
-        const calculatedTotal = money(cartTotal());
-        const generatedOrderNo = `BGB-${new Date().getFullYear()}-${String(orders.length + 1).padStart(6, "0")}`;
-
-        // Construct a structured spreadsheet text row matching columns A-L
-        const liveCsvRow = `${clean(generatedOrderNo)},${clean(new Date().toLocaleString("en-IN"))},${clean(fData.get('buyerName'))},${clean(fData.get('phone'))},${clean(fData.get('email'))},${clean(fData.get('location') || DELIVERY_POINT_ADDRESS)},${clean(itemsSummaryString)},${clean(calculatedTotal)},"Payment Submitted",${clean(fData.get('utrNumber'))},${clean(generatedOrderNo + '.jpg')},${clean(new Date().toLocaleString("en-IN"))}\n`;
-
-        // Direct background injection fetch hook to Apps Script
-        fetch(GOOGLE_WEB_APP_URL, {
-          method: "POST",
-          mode: "no-cors",
-          body: liveCsvRow
-        });
-        console.log("Realtime checkout background post processed.");
-      } catch (err) {
-        console.error("Sheets automatic checkout capture hook crashed:", err);
+        const savedProduct = await persistShared("saveProduct", item);
+        if (savedProduct) {
+          products = products.map((product) => (product.id === item.id ? savedProduct : product));
+        }
+        renderAll();
+      } catch (error) {
+        item.listed = previousListed;
+        renderAll();
       }
-    });
-  }
+    }
+    if (deleteId && confirm("Delete this product permanently?")) {
+      const previousProducts = products;
+      const previousCart = cart;
+      products = products.filter((product) => product.id !== deleteId);
+      cart = cart.filter((item) => item.id !== deleteId);
+      try {
+        await persistShared("deleteProduct", { id: deleteId });
+        renderAll();
+      } catch (error) {
+        products = previousProducts;
+        cart = previousCart;
+        renderAll();
+      }
+    }
+  });
 
-  // Intercept Admin Download CSV button
-  const downloadBtn = document.getElementById("downloadCsvBtn");
-  if (downloadBtn) {
-    downloadBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      downloadOrdersCsv();
-    });
-  }
-});
-
-// Setup continuous Firebase syncing for Admin Dashboard instances
-onValue(ref(db, "orders"), (snapshot) => {
-  const data = snapshot.val();
-  if (data) {
-    orders = migrateOrders(Object.values(data));
+  $("#ordersList")?.addEventListener("change", async (event) => {
+    const orderStatusId = event.target.dataset.orderStatus;
+    if (orderStatusId) {
+      const order = orders.find((item) => item.id === orderStatusId);
+      if (!order) return;
+      const previousStatus = order.status;
+      order.status = event.target.value;
+      try {
+        await persistShared("saveOrder", order);
+      } catch (error) {
+        order.status = previousStatus;
+      }
+    }
     renderAll();
+  });
+
+  $("#ordersList")?.addEventListener("click", async (event) => {
+    const proofButton = event.target.closest("[data-proof-open]");
+    if (proofButton) openPaymentProof(proofButton.dataset.proofOpen);
+    const printButton = event.target.closest("[data-print-order]");
+    if (printButton) printOrderDetails(printButton.dataset.printOrder);
+    const deleteButton = event.target.closest("[data-delete-order]");
+    if (deleteButton && confirm("Delete this order from Order Management? Inventory counts will stay unchanged.")) {
+      const previousOrders = orders;
+      orders = orders.filter((order) => order.id !== deleteButton.dataset.deleteOrder);
+      try {
+        await persistShared("deleteOrder", { id: deleteButton.dataset.deleteOrder });
+        renderAll();
+      } catch (error) {
+        orders = previousOrders;
+        renderAll();
+      }
+    }
+  });
+
+  $("#downloadOrdersCsv")?.addEventListener("click", downloadOrdersCsv);
+
+  $("#productForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const productForm = event.currentTarget;
+    const form = new FormData(productForm);
+    const id = form.get("id") || crypto.randomUUID();
+    const existing = products.find((item) => item.id === id);
+    const soldQuantity = existing ? existing.soldQuantity : 0;
+    const totalStock = Math.max(Number(form.get("totalStock")), soldQuantity);
+    const product = {
+      id,
+      name: form.get("name").trim(),
+      description: form.get("description").trim(),
+      category: form.get("category").trim(),
+      image: form.get("image").trim() || DEFAULT_IMAGE,
+      price: Number(form.get("price")),
+      totalStock,
+      soldQuantity,
+      listed: form.get("listed") === "on",
+      showPublicQuantity: form.get("showPublicQuantity") === "on",
+      createdAt: existing ? existing.createdAt : new Date().toISOString()
+    };
+
+    const previousProducts = products;
+    const previousCart = cart;
+
+    try {
+      const savedProduct = await persistShared("saveProduct", product);
+      const finalProduct = savedProduct || product;
+      products = existing
+        ? products.map((item) => (item.id === id ? finalProduct : item))
+        : [...products, finalProduct];
+
+      cart = cart
+        .map((item) => {
+          const updated = products.find((productItem) => productItem.id === item.id);
+          return updated
+            ? { ...item, quantity: Math.min(item.quantity, remainingStock(updated)) }
+            : item;
+        })
+        .filter((item) => item.quantity > 0);
+
+      resetProductForm();
+      renderAll();
+    } catch (error) {
+      products = previousProducts;
+      cart = previousCart;
+      renderAll();
+    }
+  });
+
+  $("#brandingForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const brandingForm = event.currentTarget;
+    const form = new FormData(brandingForm);
+    const logoFile = form.get("logoFile");
+    let logoUrl = settings.logoUrl || DEFAULT_LOGO;
+    try {
+      if (logoFile && logoFile.size > 0) {
+        const isSvg = logoFile.type === "image/svg+xml" || /\.svg$/i.test(logoFile.name);
+        const isAllowedType = ["image/jpeg", "image/png", "image/webp", "image/svg+xml"].includes(logoFile.type);
+        const isAllowedExtension = /\.(jpe?g|png|webp|svg)$/i.test(logoFile.name);
+        if (!isAllowedType && !isAllowedExtension) {
+          throw new Error("Upload logo as JPG, JPEG, PNG, WebP, or SVG.");
+        }
+        if (isSvg && logoFile.size > 500 * 1024) {
+          throw new Error("SVG logo must be smaller than 500 KB.");
+        }
+        logoUrl = isSvg
+          ? await fileToDataUrl(logoFile)
+          : await optimizeImageFile(logoFile, 512, 0.82);
+      }
+    } catch (error) {
+      alert(error.message || "The logo could not be uploaded.");
+      return;
+    }
+    const previousSettings = { ...settings };
+    settings = {
+      siteName: form.get("siteName").trim() || "BG BAZAAR",
+      logoUrl,
+      contactPhone: form.get("contactPhone").trim() || "9117138483",
+      contactEmail: form.get("contactEmail").trim() || "amaresh.r2030i@iimbg.ac.in",
+      upiId: settings.upiId,
+      qrImage: settings.qrImage,
+      bankDetails: settings.bankDetails
+    };
+    if (!save()) {
+      settings = previousSettings;
+      alert(STORAGE_WARNING);
+      return;
+    }
+    try {
+      const savedSettings = await persistShared("saveSettings", settings);
+      settings = normalizeSettings(savedSettings || settings);
+      brandingForm.elements.logoFile.value = "";
+      renderAll();
+    } catch (error) {
+      settings = previousSettings;
+      save();
+      renderAll();
+    }
+  });
+
+  $("#settingsForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const settingsForm = event.currentTarget;
+    const form = new FormData(settingsForm);
+    const qrFile = form.get("qrImage");
+    let qrImage = settings.qrImage;
+    try {
+      if (qrFile && qrFile.size > 0) {
+        const isAllowedType = ["image/jpeg", "image/png", "image/webp"].includes(qrFile.type);
+        const isAllowedExtension = /\.(jpe?g|png|webp)$/i.test(qrFile.name);
+        if (!isAllowedType && !isAllowedExtension) {
+          throw new Error("Upload QR code as JPG, JPEG, PNG, or WebP.");
+        }
+        qrImage = await optimizeImageFile(qrFile, 900, 0.84, "image/png");
+      }
+    } catch (error) {
+      alert(error.message || "The payment QR image could not be uploaded.");
+      return;
+    }
+    const previousSettings = { ...settings };
+    settings.upiId = form.get("upiId").trim() || "payments@bgbazaar";
+    settings.qrImage = qrImage;
+    settings.bankDetails = form.get("bankDetails").trim() || "Bank details will appear here after admin setup.";
+    if (!save()) {
+      settings = previousSettings;
+      alert(STORAGE_WARNING);
+      return;
+    }
+    try {
+      const savedSettings = await persistShared("saveSettings", settings);
+      settings = normalizeSettings(savedSettings || settings);
+      settingsForm.elements.qrImage.value = "";
+      alert("Payment settings updated successfully!");
+      renderAll();
+    } catch (error) {
+      settings = previousSettings;
+      save();
+      renderAll();
+    }
+  });
+
+  $("#categoryForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const id = form.get("categoryId") || crypto.randomUUID();
+    const existing = categories.find((c) => c.id === id);
+    
+    const category = {
+      id,
+      name: form.get("categoryName").trim(),
+      description: form.get("categoryDescription").trim()
+    };
+
+    const previousCategories = categories;
+    try {
+      const savedCategory = await persistShared("saveCategory", category);
+      const finalCategory = savedCategory || category;
+      categories = existing
+        ? categories.map((item) => (item.id === id ? finalCategory : item))
+        : [...categories, finalCategory];
+      resetCategoryForm();
+      renderAll();
+    } catch (error) {
+      categories = previousCategories;
+      renderAll();
+    }
+  });
+
+  $("#categoriesList")?.addEventListener("click", async (event) => {
+    const editId = event.target.dataset.editCategory;
+    const deleteId = event.target.dataset.deleteCategory;
+    
+    if (editId) fillCategoryForm(editId);
+    if (deleteId && confirm("Delete this category? Products in this category will not be affected.")) {
+      const previousCategories = categories;
+      categories = categories.filter((c) => c.id !== deleteId);
+      try {
+        await persistShared("deleteCategory", { id: deleteId });
+        renderAll();
+      } catch (error) {
+        categories = previousCategories;
+        renderAll();
+      }
+    }
+  });
+
+  $("#resetCategoryBtn")?.addEventListener("click", resetCategoryForm);
+
+  $("#paymentForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const paymentForm = event.currentTarget;
+    const checkoutMessage = $("#checkoutMessage");
+    const submitButton = $("#submitOrderBtn");
+    const rows = getCartRows();
+    checkoutMessage.classList.remove("error");
+    checkoutMessage.textContent = "";
+    if (!rows.length) {
+      checkoutMessage.textContent = "Add at least one product before checkout.";
+      checkoutMessage.classList.add("error");
+      return;
+    }
+
+    const form = new FormData(paymentForm);
+    const proof = form.get("paymentProof");
+    if (!acceptedProofFile(proof)) {
+      checkoutMessage.textContent = "Upload payment proof as JPG, JPEG, PNG, WebP, or PDF.";
+      checkoutMessage.classList.add("error");
+      return;
+    }
+
+    const unavailable = rows.find((row) => row.quantity > remainingStock(row.product));
+    if (unavailable) {
+      checkoutMessage.textContent = `${unavailable.product.name} does not have enough stock.`;
+      checkoutMessage.classList.add("error");
+      renderAll();
+      return;
+    }
+
+    submitButton.disabled = true;
+    submitButton.textContent = "Submitting Order...";
+    checkoutMessage.textContent = "Processing payment proof...";
+
+    try {
+      const proofData = await prepareProofData(proof);
+      const isPdf = proof.type === "application/pdf" || /\.pdf$/i.test(proof.name);
+      const now = new Date().toISOString();
+      const orderNumber = generateOrderNumber();
+      const proofType = isPdf ? "application/pdf" : "image/jpeg";
+      const order = {
+        id: crypto.randomUUID(),
+        orderNumber,
+        buyerName: form.get("buyerName").trim(),
+        mobileNumber: form.get("phone").trim(),
+        emailAddress: form.get("email").trim(),
+        deliveryLocation: DELIVERY_POINT_ADDRESS,
+        notes: "",
+        totalAmount: cartTotal(),
+        status: "Pending",
+        createdAt: now,
+        items: rows.map((row) => ({
+          productId: row.id,
+          name: row.product.name,
+          quantity: row.quantity,
+          unitPrice: row.product.price,
+          subtotal: row.product.price * row.quantity
+        })),
+        utrNumber: form.get("utrNumber").trim(),
+        paymentProofName: proofFileName(orderNumber, proofType),
+        paymentProofType: proofType,
+        paymentProofData: proofData,
+        paymentSubmittedAt: now
+      };
+
+      checkoutMessage.textContent = "Saving order securely...";
+      const result = await createOrder(order);
+      const savedOrder = result?.order || order;
+      const changedProducts = result?.products || [];
+      const previousProducts = products;
+      const previousOrders = orders;
+      const previousCart = cart;
+      products = products.map((product) => {
+        const changedProduct = changedProducts.find((item) => item.id === product.id);
+        return changedProduct || product;
+      });
+      orders = [...orders.filter((item) => item.id !== savedOrder.id), savedOrder];
+      cart = [];
+      sessionStorage.setItem("bgbazaar_last_order", JSON.stringify(savedOrder));
+
+      if (!save()) {
+        products = previousProducts;
+        orders = previousOrders;
+        cart = previousCart;
+        save();
+        throw new Error(STORAGE_WARNING);
+      }
+
+      paymentForm.reset();
+      checkoutMessage.textContent = `Order ${savedOrder.orderNumber} submitted. Redirecting...`;
+      renderAll();
+      setTimeout(() => {
+        window.location.href = "order-success.html";
+      }, 1200);
+    } catch (error) {
+      checkoutMessage.textContent = error.message || "Order submission failed. Please try again.";
+      checkoutMessage.classList.add("error");
+    } finally {
+      submitButton.disabled = false;
+      submitButton.textContent = "Submit Order";
+    }
+  });
+
+  $("#loginForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const loginMessage = $("#loginMessage");
+    const username = form.get("username").trim();
+    const password = form.get("password").trim();
+    
+    if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+      isAdminLoggedIn = true;
+      sessionStorage.setItem("bgbazaar_admin", "true");
+      event.currentTarget.reset();
+      loginMessage.textContent = "Loading dashboard data...";
+      await hydrateSharedState(true);
+      loginMessage.textContent = "";
+      renderAll();
+    } else {
+      isAdminLoggedIn = false;
+      loginMessage.textContent = "Invalid admin username or password.";
+    }
+  });
+
+  $("#logoutBtn")?.addEventListener("click", () => {
+    isAdminLoggedIn = false;
+    sessionStorage.removeItem("bgbazaar_admin");
+    renderAll();
+  });
+
+  $("#clearCartBtn")?.addEventListener("click", () => {
+    cart = [];
+    const checkoutMessage = $("#checkoutMessage");
+    if (checkoutMessage) {
+      checkoutMessage.textContent = "";
+      checkoutMessage.classList.remove("error");
+    }
+    renderAll();
+  });
+
+  $("#userLoginForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const message = $("#userLoginMessage");
+    const email = form.get("userEmail").trim();
+    const password = form.get("userPassword").trim();
+    
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      currentUser = userCredential.user;
+      const savedUserData = await getUserData(currentUser.uid);
+      userData = savedUserData || { email: currentUser.email };
+      await loadUserCart(currentUser.uid);
+      isUserLoggedIn = true;
+      event.currentTarget.reset();
+      renderAll();
+    } catch (error) {
+      isUserLoggedIn = false;
+      currentUser = null;
+      userData = null;
+      message.textContent = error.message || "Login failed. Please try again.";
+    }
+  });
+
+  $("#userRegisterForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const message = $("#userRegisterMessage");
+    const name = form.get("registerName").trim();
+    const email = form.get("registerEmail").trim();
+    const password = form.get("registerPassword").trim();
+    const phone = form.get("registerPhone").trim();
+    const address = form.get("registerAddress").trim();
+    
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      currentUser = userCredential.user;
+      userData = {
+        uid: currentUser.uid,
+        name,
+        email,
+        phone,
+        address
+      };
+      await saveUserData(currentUser.uid, userData);
+      cart = [];
+      await saveUserCart(currentUser.uid, cart);
+      isUserLoggedIn = true;
+      event.currentTarget.reset();
+      renderAll();
+    } catch (error) {
+      isUserLoggedIn = false;
+      currentUser = null;
+      userData = null;
+      message.textContent = error.message || "Registration failed. Please try again.";
+    }
+  });
+
+  $("#userLogoutBtn")?.addEventListener("click", async () => {
+    try {
+      if (isUserLoggedIn && currentUser) {
+        await syncCartToFirebase();
+      }
+      await signOut(auth);
+      isUserLoggedIn = false;
+      currentUser = null;
+      userData = null;
+      userCart = [];
+      localStorage.removeItem("bgbazaar_cart");
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+    renderAll();
+  });
+
+  $("#showRegisterForm")?.addEventListener("click", () => {
+    $("#userLoginForm")?.classList.add("hidden");
+    $("#userRegisterForm")?.classList.remove("hidden");
+    $("#userLoginMessage").textContent = "";
+    $("#userRegisterMessage").textContent = "";
+  });
+
+  $("#showLoginForm")?.addEventListener("click", () => {
+    $("#userRegisterForm")?.classList.add("hidden");
+    $("#userLoginForm")?.classList.remove("hidden");
+    $("#userLoginMessage").textContent = "";
+    $("#userRegisterMessage").textContent = "";
+  });
+
+  $("#userBtn")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const dropdown = $("#userDropdown");
+    if (dropdown) {
+      dropdown.classList.toggle("hidden");
+    }
+  });
+
+  document.addEventListener("click", () => {
+    const dropdown = $("#userDropdown");
+    if (dropdown) {
+      dropdown.classList.add("hidden");
+    }
+  });
+
+  $("#resetFormBtn")?.addEventListener("click", resetProductForm);
+
+  ["#searchInput", "#categoryFilter"].forEach((selector) => {
+    const control = $(selector);
+    control?.addEventListener("input", () => {
+      renderFilters();
+      renderShop();
+    });
+    control?.addEventListener("change", () => {
+      renderFilters();
+      renderShop();
+    });
+  });
+
+  $("#orderSearchInput")?.addEventListener("input", renderOrders);
+}
+
+function setupRealtimeListeners() {
+  onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      currentUser = user;
+      const savedUserData = await getUserData(user.uid);
+      userData = savedUserData || { email: user.email };
+      await loadUserCart(user.uid);
+      isUserLoggedIn = true;
+    } else {
+      isUserLoggedIn = false;
+      currentUser = null;
+      userData = null;
+    }
+    renderAll();
+  });
+
+  onValue(ref(db, "categories"), (snapshot) => {
+    const data = snapshot.val();
+    categories = data ? Object.values(data) : [];
+    renderAll();
+  });
+  onValue(ref(db, "products"), (snapshot) => {
+    const data = snapshot.val();
+    products = migrateProducts(data ? Object.values(data) : []);
+    renderAll();
+  });
+  onValue(ref(db, "settings"), (snapshot) => {
+    if (snapshot.exists()) {
+      settings = normalizeSettings(snapshot.val());
+      renderAll();
+    }
+  });
+  onValue(ref(db, "orders"), (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      orders = migrateOrders(Object.values(data));
+      renderAll();
+      Object.values(data).forEach(order => trackLiveOrder(order));
+    }
+  });
+}
+
+attachEvents();
+renderAll();
+setupRealtimeListeners();
+
+
+// =======================================================
+// UNIFIED GOOGLE SHEETS LIVE & BUTTON SYNC
+// =======================================================
+const GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwV4Gq5YcUQ36IImmyPPZTNTMvA3F5Z7RVk9N0Te2LiDVYYE6DKsQAOu16xHM0o9YHWMQ/exec";
+
+// Helper to safely format data fields for the spreadsheet grid columns
+const cleanField = (val) => `"${(val || '').toString().replace(/"/g, '""')}"`;
+
+function sendToGoogleSheets(csvText) {
+  fetch(GOOGLE_WEB_APP_URL, { method: "POST", body: csvText })
+    .then(r => r.text())
+    .then(msg => console.log("Sheet Sync Status:", msg))
+    .catch(err => console.error("Sheet Sync Error:", err));
+}
+
+// 1. LIVE TIME FUNCTION (Formats single orders into clean grid rows)
+let processedOrderKeys = new Set();
+
+function trackLiveOrder(orderData) {
+  const orderKey = `${orderData.orderNo}_${orderData.status}`;
+  if (processedOrderKeys.has(orderKey)) return; // Prevents duplicate row spamming
+  processedOrderKeys.add(orderKey);
+
+  const csvLine = `${cleanField(orderData.orderNo)},${cleanField(orderData.createdAt)},${cleanField(orderData.buyerName || orderData.name)},${cleanField(orderData.mobile || orderData.phone)},${cleanField(orderData.email)},${cleanField(orderData.address || orderData.deliveryAddress)},${cleanField(orderData.items)},${cleanField(orderData.total || orderData.amount)},${cleanField(orderData.status)},${cleanField(orderData.utr || orderData.utrNumber)}\n`;
+  
+  sendToGoogleSheets(csvLine);
+}
+
+// 2. BUTTON INTERCEPTOR
+const originalClick = HTMLAnchorElement.prototype.click;
+HTMLAnchorElement.prototype.click = function() {
+  const href = this.href;
+  if (href && (href.startsWith('data:text/csv') || href.startsWith('blob:'))) {
+    if (href.startsWith('data:text/csv')) {
+      sendToGoogleSheets(decodeURIComponent(href.split(',')[1]));
+    } else if (href.startsWith('blob:')) {
+      fetch(href).then(r => r.text()).then(text => sendToGoogleSheets(text));
+    }
   }
-});
+  return originalClick.apply(this, arguments);
+};
