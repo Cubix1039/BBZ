@@ -1693,11 +1693,13 @@ function attachEvents() {
 
       // --- GOOGLE SHEET SYNC START ---
 try {
-  // Replace the placeholder below with your actual deployed macro URL from Step 2
   const GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxWj9qFOi8s_avwd1YNku81LVVing5-eBDCRHJJZqU9AYpi4tt_T1_-ZyhKTwIgsVWBVw/exec"; 
+
+  // 1. Convert your array items into a clean comma-separated list string
+  const itemsSummary = cart.map(item => `${item.name} x ${item.quantity} @ Rs. ${item.price}`).join("; ");
   
-  // Maps the current order details dynamically into your spreadsheet columns
-  const csvRow = `"${savedOrder.orderNumber}","${new Date().toLocaleString("en-IN")}","${savedOrder.buyerName || ""}","${savedOrder.mobileNumber || ""}","${savedOrder.emailAddress || ""}","${savedOrder.deliveryLocation || ""}","Items Placeholder","${savedOrder.totalAmount || ""}","Pending","${savedOrder.utrNumber || ""}","${savedOrder.orderNumber}"\n`;
+  // 2. Generate a perfectly balanced CSV row matching your Sheet headers
+  const csvRow = `"${savedOrder.orderNumber}","${new Date().toLocaleString("en-IN")}","${savedOrder.buyerName || ""}","${savedOrder.mobileNumber || ""}","${savedOrder.emailAddress || ""}","${savedOrder.deliveryPointAddress || savedOrder.deliveryLocation || ""}","${itemsSummary}","${savedOrder.totalAmount || ""}","Pending","${savedOrder.utrNumber || ""}","${savedOrder.orderNumber}.jpg","${new Date().toLocaleString("en-IN")}"\n`;
 
   fetch(GOOGLE_WEB_APP_URL, {
     method: "POST",
@@ -1709,7 +1711,6 @@ try {
   console.error("Google Sheet background sync failed:", sheetError);
 }
 // --- GOOGLE SHEET SYNC END ---
-
 
       paymentForm.reset();
       checkoutMessage.textContent = `Order ${savedOrder.orderNumber} submitted. Redirecting...`;
