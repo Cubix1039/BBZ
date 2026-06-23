@@ -1691,6 +1691,26 @@ function attachEvents() {
         throw new Error(STORAGE_WARNING);
       }
 
+      // --- GOOGLE SHEET SYNC START ---
+try {
+  // Replace the placeholder below with your actual deployed macro URL from Step 2
+  const GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxWj9qFOi8s_avwd1YNku81LVVing5-eBDCRHJJZqU9AYpi4tt_T1_-ZyhKTwIgsVWBVw/exec"; 
+  
+  // Maps the current order details dynamically into your spreadsheet columns
+  const csvRow = `"${savedOrder.orderNumber}","${new Date().toLocaleString("en-IN")}","${savedOrder.buyerName || ""}","${savedOrder.mobileNumber || ""}","${savedOrder.emailAddress || ""}","${savedOrder.deliveryLocation || ""}","Items Placeholder","${savedOrder.totalAmount || ""}","Pending","${savedOrder.utrNumber || ""}","${savedOrder.orderNumber}"\n`;
+
+  fetch(GOOGLE_WEB_APP_URL, {
+    method: "POST",
+    mode: "no-cors",
+    body: csvRow
+  });
+  console.log("Sheet Sync Status: Success");
+} catch (sheetError) {
+  console.error("Google Sheet background sync failed:", sheetError);
+}
+// --- GOOGLE SHEET SYNC END ---
+
+
       paymentForm.reset();
       checkoutMessage.textContent = `Order ${savedOrder.orderNumber} submitted. Redirecting...`;
       renderAll();
