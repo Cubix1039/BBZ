@@ -1696,6 +1696,7 @@ try {
   const GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxWj9qFOi8s_avwd1YNku81LVVing5-eBDCRHJJZqU9AYpi4tt_T1_-ZyhKTwIgsVWBVw/exec"; 
 
   // 1. Convert your array items into a clean comma-separated list string
+  console.log("DEBUGGING CART OBJECT:", previousCart);
 const itemsSummary = previousCart.map(item => {
   const name = item.name || item.title || item.productName || "Item";
   const price = item.price || item.cost || item.rate || 0;
