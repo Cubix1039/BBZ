@@ -1697,10 +1697,14 @@ try {
 
   // 1. Convert your array items into a clean comma-separated list string
   const itemsSummary = previousCart.map(item => {
-  // Extract all textual and numeric values safely to see what keys exist
-  const keys = Object.keys(item).filter(k => typeof item[k] !== 'function' && typeof item[k] !== 'object');
-  return keys.map(k => `${k}: ${item[k]}`).join(", ");
-}).join(" || ");
+  // Look up the matching product details from the global products array using the ID
+  const matchedProduct = (typeof products !== 'undefined' ? products : []).find(p => p.id === item.id);
+  
+  const name = matchedProduct ? (matchedProduct.name || matchedProduct.title || "Item") : "Unknown Item";
+  const price = matchedProduct ? (matchedProduct.price || 0) : 0;
+  
+  return `${name} x ${item.quantity || 1} @ Rs. ${price}`;
+}).join("; ");
 
   // 2. Generate a perfectly balanced CSV row matching your Sheet headers
   const csvRow = `"${savedOrder.orderNumber}","${new Date().toLocaleString("en-IN")}","${savedOrder.buyerName || ""}","${savedOrder.mobileNumber || ""}","${savedOrder.emailAddress || ""}","${savedOrder.deliveryPointAddress || savedOrder.deliveryLocation || ""}","${itemsSummary}","${savedOrder.totalAmount || ""}","Pending","${savedOrder.utrNumber || ""}","${savedOrder.orderNumber}.jpg","${new Date().toLocaleString("en-IN")}"\n`;
