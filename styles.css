@@ -288,7 +288,7 @@ img {
   margin: 8px 0 0;
   font-size: 15px;
   line-height: 1.6;
-  opacity: 0.95;
+  opacity: 1;
 }
 
 .eyebrow {
@@ -407,6 +407,11 @@ img {
   background:
     radial-gradient(circle at 86% 20%, rgba(245, 154, 26, 0.36), transparent 18rem),
     linear-gradient(135deg, #057987, #0d4650) !important;
+}
+
+.mandatory-confirmation {
+  color: #ff2b2b !important;
+  font-weight: 800;
 }
 
 .shop-intro p:last-child {

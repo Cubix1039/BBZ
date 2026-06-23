@@ -28,7 +28,7 @@
       <section class="page-hero success-hero">
         <p class="eyebrow">Order Confirmation</p>
         <h1>Thank You for Your Order!</h1>
-        <p class="page-hero-copy">Your order has been submitted successfully. Please keep this confirmation for pickup from BGBAZAAR Office.</p>
+        <p class="page-hero-copy">Your order has been submitted successfully. <span class="mandatory-confirmation">Please keep this confirmation for pickup from BGBAZAAR Office.</span></p>
       </section>
 
       <section class="section order-print-section">
@@ -51,7 +51,7 @@
               <p id="successAddress">-</p>
             </div>
             <div class="order-detail-box">
-              <h4>Contact Information</h4>
+              <h4>Contact Us</h4>
               <p><strong id="successName">-</strong></p>
               <p id="successMobile">-</p>
               <p id="successEmail">-</p>
@@ -76,7 +76,7 @@
 
           <div class="print-hide support-card">
             <h4>Need Help?</h4>
-            <p>Contact us: <a href="tel:9117138483">9117138483</a> or <a href="mailto:amaresh.r2030i@iimbg.ac.in">amaresh.r2030i@iimbg.ac.in</a></p>
+            <p>Contact us: Amaresh Raj, <a href="tel:9117138483">9117138483</a> or <a href="mailto:amaresh.r2030i@iimbg.ac.in">amaresh.r2030i@iimbg.ac.in</a></p>
           </div>
 
           <div class="print-hide order-success-actions">
@@ -110,9 +110,9 @@
         const orderTotal = Number(lastOrder.totalAmount || 0);
 
         document.getElementById('successOrderNumber').textContent = lastOrder.orderNumber || '-';
-        document.getElementById('successName').textContent = lastOrder.buyerName || '-';
-        document.getElementById('successMobile').textContent = lastOrder.mobileNumber ? 'Mobile: ' + lastOrder.mobileNumber : '-';
-        document.getElementById('successEmail').textContent = lastOrder.emailAddress ? 'Email: ' + lastOrder.emailAddress : '-';
+        document.getElementById('successName').textContent = 'Amaresh Raj';
+        document.getElementById('successMobile').textContent = 'Mobile: 9117138483';
+        document.getElementById('successEmail').textContent = 'Email: amaresh.r2030i@iimbg.ac.in';
         document.getElementById('successAddress').textContent = lastOrder.deliveryLocation || 'BgBazaar Office';
         document.getElementById('successTotal').textContent = money(orderTotal);
         document.getElementById('successUtr').textContent = lastOrder.utrNumber || '-';
