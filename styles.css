@@ -894,6 +894,11 @@ textarea {
   margin-bottom: 16px;
 }
 
+.payment-options {
+  display: grid;
+  gap: 14px;
+}
+
 .payment-box p {
   margin: 0;
   font-weight: 700;
@@ -907,26 +912,12 @@ textarea {
   border-radius: 6px;
 }
 
-.bank-details,
 .qr-preview-box {
   margin-top: 14px;
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
-}
-
-.bank-details h4 {
-  margin: 0 0 8px;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.bank-details p {
-  margin-bottom: 0;
-  color: var(--muted);
-  line-height: 1.6;
-  font-size: 13px;
 }
 
 .qr-preview-box {
@@ -1463,6 +1454,15 @@ td {
 
 .proof-card p {
   margin: 0;
+}
+
+.proof-image-button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
 }
 
 .proof-card img {

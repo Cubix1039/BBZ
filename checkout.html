@@ -78,12 +78,18 @@
              <span>Order Total</span>
              <strong id="paymentAmount">Rs. 0</strong>
            </div>
-           <div class="payment-box">
-             <p>Scan to Pay</p>
-             <img id="upiQr" alt="Payment QR code">
-             <strong id="upiLabel">payments@bgbazaar</strong>
+           <div class="payment-options">
+             <div class="payment-box">
+               <p>Scan to Pay</p>
+               <img id="upiQr" alt="Payment QR code">
+               <strong id="upiLabel">payments@bgbazaar</strong>
+             </div>
+             <div id="secondaryPaymentBox" class="payment-box hidden">
+               <p>Alternate QR</p>
+               <img id="secondaryUpiQr" alt="Alternate payment QR code">
+               <strong id="secondaryUpiLabel"></strong>
+             </div>
            </div>
-           <div id="bankDetailsBox" class="bank-details"></div>
            <a class="secondary-link light full-link" href="cart.html">Edit Cart</a>
          </aside>
        </section>

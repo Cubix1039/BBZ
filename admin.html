@@ -138,17 +138,25 @@
                   <input name="upiId" type="text" placeholder="payments@bgbazaar" required>
                 </label>
                 <label>
-                  Payment QR Code
+                  Primary Payment QR Code
                   <input name="qrImage" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
                   <small class="file-hint">Upload a clear JPG, PNG, or WebP image up to 12 MB.</small>
                 </label>
                 <div class="qr-preview-box">
-                  <img id="adminQrPreview" alt="Current payment QR code">
+                  <img id="adminQrPreview" alt="Current primary payment QR code">
                 </div>
                 <label>
-                  Bank Details
-                  <textarea name="bankDetails" placeholder="Bank name, account holder, account number, IFSC, branch"></textarea>
+                  Alternate UPI ID
+                  <input name="secondaryUpiId" type="text" placeholder="Optional second payment ID">
                 </label>
+                <label>
+                  Alternate Payment QR Code
+                  <input name="secondaryQrImage" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
+                  <small class="file-hint">Optional JPG, PNG, or WebP image up to 12 MB.</small>
+                </label>
+                <div class="qr-preview-box">
+                  <img id="adminSecondaryQrPreview" alt="Current alternate payment QR code">
+                </div>
                 <button class="primary-btn" type="submit">Save Payment Settings</button>
               </form>
 

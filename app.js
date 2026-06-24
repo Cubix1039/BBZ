@@ -81,7 +81,8 @@ let settings = normalizeSettings(load("bgbazaar_settings", {
   contactEmail: "amaresh.r2030i@iimbg.ac.in",
   upiId: "payments@bgbazaar",
   qrImage: "",
-  bankDetails: "Bank details will appear here after admin setup."
+  secondaryUpiId: "",
+  secondaryQrImage: ""
 }));
 let isAdminLoggedIn = sessionStorage.getItem("bgbazaar_admin") === "true";
 let activeAdminPanel = "dashboardOverview";
@@ -315,7 +316,8 @@ function normalizeSettings(savedSettings) {
     contactEmail: legacyEmail ? "amaresh.r2030i@iimbg.ac.in" : savedSettings.contactEmail,
     upiId: savedSettings.upiId || "payments@bgbazaar",
     qrImage: savedSettings.qrImage || "",
-    bankDetails: savedSettings.bankDetails || "Bank details will appear here after admin setup."
+    secondaryUpiId: savedSettings.secondaryUpiId || "",
+    secondaryQrImage: savedSettings.secondaryQrImage || ""
   };
 }
 
@@ -879,16 +881,20 @@ function renderCart() {
 
   const upiQr = $("#upiQr");
   const upiLabel = $("#upiLabel");
-  const bankDetailsBox = $("#bankDetailsBox");
+  const secondaryPaymentBox = $("#secondaryPaymentBox");
+  const secondaryUpiQr = $("#secondaryUpiQr");
+  const secondaryUpiLabel = $("#secondaryUpiLabel");
   if (upiQr) {
     upiQr.src = settings.qrImage || DEFAULT_LOGO;
   }
   if (upiLabel) upiLabel.textContent = `${settings.upiId} - ${money(cartTotal())}`;
-  if (bankDetailsBox) {
-    bankDetailsBox.innerHTML = `
-      <h4>Bank details</h4>
-      <p>${escapeHtml(settings.bankDetails).replaceAll("\n", "<br>")}</p>
-    `;
+  if (secondaryPaymentBox) {
+    const hasSecondaryQr = Boolean(settings.secondaryQrImage);
+    secondaryPaymentBox.classList.toggle("hidden", !hasSecondaryQr);
+    if (secondaryUpiQr) secondaryUpiQr.src = settings.secondaryQrImage || DEFAULT_LOGO;
+    if (secondaryUpiLabel) {
+      secondaryUpiLabel.textContent = `${settings.secondaryUpiId || settings.upiId} - ${money(cartTotal())}`;
+    }
   }
   fillCheckoutForm();
 }
@@ -1078,7 +1084,10 @@ function renderOrders() {
             ? `<p class="muted">No payment proof uploaded.</p>`
             : isImageProof(order)
             ? `<div class="proof-card">
-                <p class="muted">Payment screenshot uploaded. Use the actions below to view or download it.</p>
+                <p class="muted">Payment screenshot</p>
+                <button class="proof-image-button" type="button" data-proof-open="${escapeHtml(order.id)}" aria-label="Open payment screenshot">
+                  <img src="${escapeHtml(order.paymentProofData)}" alt="Payment proof screenshot for ${escapeHtml(order.orderNumber)}" loading="lazy">
+                </button>
                 <div class="proof-actions">
                   <button class="proof-preview" type="button" data-proof-open="${escapeHtml(order.id)}">Open screenshot</button>
                   <a class="proof-preview" href="${escapeHtml(order.paymentProofData)}" download="${downloadName}">Download proof</a>
@@ -1147,9 +1156,11 @@ function renderBrandingForm() {
   
   if (settingsForm) {
     settingsForm.elements.upiId.value = settings.upiId;
-    settingsForm.elements.bankDetails.value = settings.bankDetails;
+    settingsForm.elements.secondaryUpiId.value = settings.secondaryUpiId || "";
     const preview = $("#adminQrPreview");
     if (preview) preview.src = settings.qrImage || DEFAULT_LOGO;
+    const secondaryPreview = $("#adminSecondaryQrPreview");
+    if (secondaryPreview) secondaryPreview.src = settings.secondaryQrImage || DEFAULT_LOGO;
   }
 }
 
@@ -1496,7 +1507,8 @@ function attachEvents() {
       contactEmail: form.get("contactEmail").trim() || "amaresh.r2030i@iimbg.ac.in",
       upiId: settings.upiId,
       qrImage: settings.qrImage,
-      bankDetails: settings.bankDetails
+      secondaryUpiId: settings.secondaryUpiId || "",
+      secondaryQrImage: settings.secondaryQrImage || ""
     };
     if (!save()) {
       settings = previousSettings;
@@ -1520,7 +1532,9 @@ function attachEvents() {
     const settingsForm = event.currentTarget;
     const form = new FormData(settingsForm);
     const qrFile = form.get("qrImage");
+    const secondaryQrFile = form.get("secondaryQrImage");
     let qrImage = settings.qrImage;
+    let secondaryQrImage = settings.secondaryQrImage || "";
     try {
       if (qrFile && qrFile.size > 0) {
         const isAllowedType = ["image/jpeg", "image/png", "image/webp"].includes(qrFile.type);
@@ -1530,6 +1544,14 @@ function attachEvents() {
         }
         qrImage = await optimizeImageFile(qrFile, 900, 0.84, "image/png");
       }
+      if (secondaryQrFile && secondaryQrFile.size > 0) {
+        const isAllowedType = ["image/jpeg", "image/png", "image/webp"].includes(secondaryQrFile.type);
+        const isAllowedExtension = /\.(jpe?g|png|webp)$/i.test(secondaryQrFile.name);
+        if (!isAllowedType && !isAllowedExtension) {
+          throw new Error("Upload alternate QR code as JPG, JPEG, PNG, or WebP.");
+        }
+        secondaryQrImage = await optimizeImageFile(secondaryQrFile, 900, 0.84, "image/png");
+      }
     } catch (error) {
       alert(error.message || "The payment QR image could not be uploaded.");
       return;
@@ -1537,7 +1559,8 @@ function attachEvents() {
     const previousSettings = { ...settings };
     settings.upiId = form.get("upiId").trim() || "payments@bgbazaar";
     settings.qrImage = qrImage;
-    settings.bankDetails = form.get("bankDetails").trim() || "Bank details will appear here after admin setup.";
+    settings.secondaryUpiId = form.get("secondaryUpiId").trim();
+    settings.secondaryQrImage = secondaryQrImage;
     if (!save()) {
       settings = previousSettings;
       alert(STORAGE_WARNING);
@@ -1547,6 +1570,7 @@ function attachEvents() {
       const savedSettings = await persistShared("saveSettings", settings);
       settings = normalizeSettings(savedSettings || settings);
       settingsForm.elements.qrImage.value = "";
+      settingsForm.elements.secondaryQrImage.value = "";
       alert("Payment settings updated successfully!");
       renderAll();
     } catch (error) {
