@@ -37,13 +37,14 @@ import {
 
 // Firebase config - REPLACE WITH YOUR CONFIG
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
-  projectId: "YOUR_PROJECT",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyD4TC6jnYlKjMw2Ot9VcHh0QGmoZdhIU48",
+  authDomain: "amareshprj-msn.firebaseapp.com",
+  projectId: "amareshprj-msn",
+  storageBucket: "amareshprj-msn.firebasestorage.app",
+  messagingSenderId: "96424898401",
+  appId: "1:96424898401:web:ffd28c271d11c95f719f20",
+  measurementId: "G-TNRTBJEXWK",
+  databaseURL: "https://amareshprj-msn-default-rtdb.firebaseio.com"
 };
 
 // Initialize Firebase
