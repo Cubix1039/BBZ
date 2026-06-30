@@ -1,24 +1,29 @@
-import { auth, db, ref, set, get, child, remove, onValue, update, push, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from "./firebase.js";
+import { 
+  auth, db, ref, set, get, child, remove, onValue, update, push, 
+  signInWithEmailAndPassword, signOut, onAuthStateChanged, 
+  createUserWithEmailAndPassword, query, orderByChild, equalTo, 
+  limitToLast, limitToFirst, startAfter 
+} from "./firebase.js";
 
+// ============================================
+// CONSTANTS
+// ============================================
 const ADMIN_USERNAME = "amaresh@bgbazaar.com";
 const ADMIN_PASSWORD = "amareshraj@1321";
 
 const LOW_STOCK_THRESHOLD = 5;
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
 const MAX_PDF_BYTES = 1.5 * 1024 * 1024;
-const STORAGE_WARNING =
-  "Browser storage is full. Use a smaller image or remove older orders before trying again.";
+const STORAGE_WARNING = "Browser storage is full. Use a smaller image or remove older orders before trying again.";
 const DELIVERY_POINT_ADDRESS = "BGBAZAAR Office";
 const DEFAULT_LOGO = "assets/bg-bazaar-logo.jpeg";
-const DEFAULT_IMAGE =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='675' viewBox='0 0 900 675'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0' x2='1' y1='0' y2='1'%3E%3Cstop offset='0' stop-color='%23099aac'/%3E%3Cstop offset='1' stop-color='%23f59a1a'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='900' height='675' rx='42' fill='%23f8fbff'/%3E%3Ccircle cx='720' cy='90' r='180' fill='%23fff4df'/%3E%3Ccircle cx='135' cy='560' r='150' fill='%23e0f7fb'/%3E%3Crect x='142' y='160' width='616' height='356' rx='34' fill='url(%23bg)' opacity='0.14'/%3E%3Cpath d='M260 405h380' stroke='%23099aac' stroke-width='24' stroke-linecap='round'/%3E%3Cpath d='M300 330h300' stroke='%23f59a1a' stroke-width='24' stroke-linecap='round'/%3E%3Ctext x='450' y='270' text-anchor='middle' font-family='Avenir Next, Segoe UI, Arial, sans-serif' font-size='54' font-weight='800' fill='%23058a99'%3EBG BAZAAR%3C/text%3E%3Ctext x='450' y='465' text-anchor='middle' font-family='Avenir Next, Segoe UI, Arial, sans-serif' font-size='24' font-weight='700' letter-spacing='5' fill='%2364758b'%3ECAMPUS ESSENTIALS%3C/text%3E%3C/svg%3E";
-const ORDER_STATUSES = [
-  "Pending",
-  "Confirmed",
-  "Shipped",
-  "Delivered",
-  "Cancelled"
-];
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const PAGE_SIZE = 20;
+
+const DEFAULT_IMAGE = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='675' viewBox='0 0 900 675'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0' x2='1' y1='0' y2='1'%3E%3Cstop offset='0' stop-color='%23099aac'/%3E%3Cstop offset='1' stop-color='%23f59a1a'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='900' height='675' rx='42' fill='%23f8fbff'/%3E%3Ccircle cx='720' cy='90' r='180' fill='%23fff4df'/%3E%3Ccircle cx='135' cy='560' r='150' fill='%23e0f7fb'/%3E%3Crect x='142' y='160' width='616' height='356' rx='34' fill='url(%23bg)' opacity='0.14'/%3E%3Cpath d='M260 405h380' stroke='%23099aac' stroke-width='24' stroke-linecap='round'/%3E%3Cpath d='M300 330h300' stroke='%23f59a1a' stroke-width='24' stroke-linecap='round'/%3E%3Ctext x='450' y='270' text-anchor='middle' font-family='Avenir Next, Segoe UI, Arial, sans-serif' font-size='54' font-weight='800' fill='%23058a99'%3EBG BAZAAR%3C/text%3E%3Ctext x='450' y='465' text-anchor='middle' font-family='Avenir Next, Segoe UI, Arial, sans-serif' font-size='24' font-weight='700' letter-spacing='5' fill='%2364758b'%3ECAMPUS ESSENTIALS%3C/text%3E%3C/svg%3E";
+
+const ORDER_STATUSES = ["Pending", "Confirmed", "Shipped", "Delivered", "Cancelled"];
+
 const initialCategories = [
   { id: "cat-electronics", name: "Electronics", description: "Electronic devices and gadgets" },
   { id: "cat-fashion", name: "Fashion", description: "Clothing and accessories" },
@@ -70,6 +75,9 @@ const initialProducts = [
   }
 ];
 
+// ============================================
+// STATE VARIABLES
+// ============================================
 let categories = load("bgbazaar_categories", initialCategories);
 let products = migrateProducts(load("bgbazaar_products", initialProducts));
 let cart = load("bgbazaar_cart", []);
@@ -84,6 +92,7 @@ let settings = normalizeSettings(load("bgbazaar_settings", {
   secondaryUpiId: "",
   secondaryQrImage: ""
 }));
+
 let isAdminLoggedIn = sessionStorage.getItem("bgbazaar_admin") === "true";
 let activeAdminPanel = "dashboardOverview";
 let sharedBackendReady = false;
@@ -91,7 +100,34 @@ let isUserLoggedIn = false;
 let currentUser = null;
 let userData = null;
 let userCart = [];
+let lastOrderKey = null;
+let currentPage = 0;
+let unsubscribeOrders = null;
 
+// ============================================
+// CACHE SYSTEM
+// ============================================
+const cache = {
+  products: { data: null, timestamp: 0 },
+  categories: { data: null, timestamp: 0 },
+  settings: { data: null, timestamp: 0 }
+};
+
+function getCachedData(key) {
+  const cached = cache[key];
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    return cached.data;
+  }
+  return null;
+}
+
+function setCachedData(key, data) {
+  cache[key] = { data, timestamp: Date.now() };
+}
+
+// ============================================
+// UTILITY FUNCTIONS
+// ============================================
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
@@ -114,266 +150,12 @@ function save() {
   }
 }
 
-async function dbSave(path, data) {
-  try {
-    if (data.id) {
-      await set(ref(db, path + "/" + data.id), data);
-    } else {
-      const newRef = push(ref(db, path));
-      data.id = newRef.key;
-      await set(newRef, data);
-    }
-    return data;
-  } catch (error) {
-    throw new Error("Failed to save data: " + error.message);
-  }
-}
-
-async function dbGet(path) {
-  const snapshot = await get(ref(db, path));
-  return snapshot.exists() ? snapshot.val() : null;
-}
-
-async function dbGetAll(path) {
-  const snapshot = await get(ref(db, path));
-  if (!snapshot.exists()) return [];
-  const data = snapshot.val();
-  return Object.values(data || {});
-}
-
-async function dbDelete(path) {
-  await remove(ref(db, path));
-}
-
-async function dbUpdate(path, data) {
-  await update(ref(db, path), data);
-  return data;
-}
-
-async function subscribeToCollection(path, callback) {
-  onValue(ref(db, path), (snapshot) => {
-    const data = snapshot.val();
-    callback(data ? Object.values(data) : []);
-  }, (error) => {
-    console.error("Realtime subscription error:", error);
-  });
-}
-
-async function saveUserData(uid, data) {
-  await set(ref(db, `users/${uid}`), data);
-  return data;
-}
-
-async function getUserData(uid) {
-  const snapshot = await get(ref(db, `users/${uid}`));
-  return snapshot.exists() ? snapshot.val() : null;
-}
-
-async function getUserCart(uid) {
-  const snapshot = await get(ref(db, `users/${uid}/cart`));
-  return snapshot.exists() ? snapshot.val() : [];
-}
-
-async function saveUserCart(uid, cartData) {
-  await set(ref(db, `users/${uid}/cart`), cartData);
-}
-
-function mergeCarts(localCart, savedCart) {
-  const merged = [...localCart];
-  savedCart.forEach((savedItem) => {
-    const existing = merged.find((item) => item.id === savedItem.id);
-    if (existing) {
-      existing.quantity = Math.max(existing.quantity, savedItem.quantity);
-    } else {
-      merged.push(savedItem);
-    }
-  });
-  return merged;
-}
-
-async function loadUserCart(uid) {
-  const savedCart = await getUserCart(uid);
-  const localCart = load("bgbazaar_cart", []);
-  cart = mergeCarts(localCart, savedCart);
-}
-
-async function syncCartToFirebase() {
-  if (isUserLoggedIn && currentUser) {
-    await saveUserCart(currentUser.uid, cart);
-  }
-}
-
-async function saveCategory(category) {
-  return dbSave("categories", category);
-}
-
-async function saveProduct(product) {
-  return dbSave("products", product);
-}
-
-async function saveSettings(settingsData) {
-  await set(ref(db, "settings"), settingsData);
-  return settingsData;
-}
-
-async function saveOrder(order) {
-  return dbSave("orders", order);
-}
-
-async function deleteCategory(id) {
-  await dbDelete("categories/" + id);
-}
-
-async function deleteProduct(id) {
-  await dbDelete("products/" + id);
-}
-
-async function deleteOrder(id) {
-  await dbDelete("orders/" + id);
-}
-
-async function createOrder(order) {
-  const productsData = await dbGetAll("products");
-  const changedProducts = [];
-  for (const item of order.items || []) {
-    const product = productsData.find((p) => p.id === item.productId);
-    if (!product) throw new Error(`${item.name || "A product"} is no longer available.`);
-    const remaining = Number(product.totalStock || 0) - Number(product.soldQuantity || 0);
-    if (remaining < Number(item.quantity || 0)) {
-      throw new Error(`${product.name} does not have enough stock.`);
-    }
-    product.soldQuantity = Number(product.soldQuantity || 0) + Number(item.quantity || 0);
-    changedProducts.push(product);
-  }
-  await Promise.all(changedProducts.map(saveProduct));
-  const savedOrder = await saveOrder(order);
-  return { order: savedOrder, products: changedProducts };
-}
-
-function applySharedState(data, includeOrders = false) {
-  if (!data) return;
-  if (Array.isArray(data.categories)) categories = data.categories;
-  if (Array.isArray(data.products)) products = migrateProducts(data.products);
-  if (data.settings) settings = normalizeSettings(data.settings);
-  if (includeOrders && Array.isArray(data.orders)) orders = migrateOrders(data.orders);
-  save();
-  renderAll();
-}
-
-async function hydrateSharedState(includeOrders = isAdminLoggedIn) {
-  try {
-    const [categoriesData, productsData, settingsData, ordersData] = await Promise.all([
-      dbGetAll("categories"),
-      dbGetAll("products"),
-      dbGet("settings"),
-      includeOrders ? dbGetAll("orders") : Promise.resolve([])
-    ]);
-    applySharedState({
-      categories: categoriesData,
-      products: productsData,
-      settings: settingsData,
-      orders: ordersData
-    }, includeOrders);
-    sharedBackendReady = true;
-  } catch (error) {
-    sharedBackendReady = false;
-    console.warn("Using local cache until Firebase is available:", error.message);
-  }
-}
-
-async function persistShared(action, data, admin = true) {
-  try {
-    switch (action) {
-      case "saveCategory": return await saveCategory(data);
-      case "saveProduct": return await saveProduct(data);
-      case "saveSettings": return await saveSettings(data);
-      case "saveOrder": return await saveOrder(data);
-      case "deleteCategory": return await deleteCategory(data.id);
-      case "deleteProduct": return await deleteProduct(data.id);
-      case "deleteOrder": return await deleteOrder(data.id);
-      case "createOrder": return await createOrder(data);
-      default: throw new Error("Unknown action: " + action);
-    }
-  } catch (error) {
-    alert(error.message || "Operation failed. Please try again.");
-    await hydrateSharedState(isAdminLoggedIn);
-    throw error;
-  }
-}
-
-function normalizeSettings(savedSettings) {
-  const legacyLogo =
-    !savedSettings.logoUrl ||
-    savedSettings.logoUrl.startsWith("data:image/svg+xml") ||
-    savedSettings.logoUrl.includes("BG%3C/text%3E%3Ctext");
-  const legacySiteName = !savedSettings.siteName || savedSettings.siteName === "BGBAZAAR";
-  const legacyPhone = !savedSettings.contactPhone || savedSettings.contactPhone === "+91 9876543210";
-  const legacyEmail = !savedSettings.contactEmail || savedSettings.contactEmail === "contact@bgbazaar.com";
-  return {
-    siteName: legacySiteName ? "BG BAZAAR" : savedSettings.siteName,
-    logoUrl: legacyLogo ? DEFAULT_LOGO : savedSettings.logoUrl,
-    contactPhone: legacyPhone ? "9117138483" : savedSettings.contactPhone,
-    contactEmail: legacyEmail ? "amaresh.r2030i@iimbg.ac.in" : savedSettings.contactEmail,
-    upiId: savedSettings.upiId || "payments@bgbazaar",
-    qrImage: savedSettings.qrImage || "",
-    secondaryUpiId: savedSettings.secondaryUpiId || "",
-    secondaryQrImage: savedSettings.secondaryQrImage || ""
+function debounce(fn, delay = 300) {
+  let timeoutId;
+  return function(...args) {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => fn.apply(this, args), delay);
   };
-}
-
-function migrateProducts(savedProducts) {
-  return savedProducts.map((item) => {
-    const totalStock = Number(item.totalStock ?? item.quantity ?? 0);
-    const soldQuantity = Number(item.soldQuantity ?? 0);
-    const legacyImage = !item.image || item.image.includes("images.unsplash.com");
-    return {
-      id: item.id || crypto.randomUUID(),
-      name: item.name || "Untitled product",
-      description: item.description || "Product details available at BG BAZAAR.",
-      category: item.category || "General",
-      image: legacyImage ? DEFAULT_IMAGE : item.image,
-      price: Number(item.price || 0),
-      totalStock,
-      soldQuantity: Math.min(soldQuantity, totalStock),
-      listed: item.listed !== false,
-      showPublicQuantity: item.showPublicQuantity === true,
-      createdAt: item.createdAt || new Date().toISOString()
-    };
-  });
-}
-
-function migrateOrders(savedOrders) {
-  return savedOrders.map((order, index) => {
-    const createdAt = order.createdAt
-      ? new Date(order.createdAt).toISOString()
-      : new Date().toISOString();
-    return {
-      id: order.id || crypto.randomUUID(),
-      orderNumber:
-        order.orderNumber ||
-        `BGB-${new Date(createdAt).getFullYear()}-${String(index + 1).padStart(6, "0")}`,
-      buyerName: order.buyerName || "Unknown buyer",
-      mobileNumber: order.mobileNumber || order.phone || "",
-      emailAddress: order.emailAddress || order.email || "",
-      deliveryLocation: order.deliveryLocation || order.address || DELIVERY_POINT_ADDRESS,
-      notes: order.notes || "",
-      totalAmount: Number(order.totalAmount ?? order.total ?? 0),
-      status: order.status || "Payment Submitted",
-      createdAt,
-      items: (order.items || []).map((item) => ({
-        productId: item.productId || item.id || "",
-        name: item.name || "Product",
-        quantity: Number(item.quantity || 0),
-        unitPrice: Number(item.unitPrice ?? item.price ?? 0),
-        subtotal: Number(item.subtotal ?? (item.price || 0) * (item.quantity || 0))
-      })),
-      utrNumber: order.utrNumber || order.transactionId || "",
-      paymentProofName: order.paymentProofName || "",
-      paymentProofType: order.paymentProofType || "",
-      paymentProofData: order.paymentProofData || "#",
-      paymentSubmittedAt: order.paymentSubmittedAt || createdAt
-    };
-  });
 }
 
 function escapeHtml(value) {
@@ -453,21 +235,473 @@ function proofFileName(orderNumber, proofType) {
   return `${orderNumber}.${extension}`;
 }
 
+function compressProductData(product) {
+  const { id, name, price, image, category, totalStock, soldQuantity, listed } = product;
+  return { id, name, price, image, category, totalStock, soldQuantity, listed };
+}
+
+// ============================================
+// DATA MIGRATION FUNCTIONS
+// ============================================
+function normalizeSettings(savedSettings) {
+  const legacyLogo = !savedSettings.logoUrl ||
+    savedSettings.logoUrl.startsWith("data:image/svg+xml") ||
+    savedSettings.logoUrl.includes("BG%3C/text%3E%3Ctext");
+  const legacySiteName = !savedSettings.siteName || savedSettings.siteName === "BGBAZAAR";
+  const legacyPhone = !savedSettings.contactPhone || savedSettings.contactPhone === "+91 9876543210";
+  const legacyEmail = !savedSettings.contactEmail || savedSettings.contactEmail === "contact@bgbazaar.com";
+  
+  return {
+    siteName: legacySiteName ? "BG BAZAAR" : savedSettings.siteName,
+    logoUrl: legacyLogo ? DEFAULT_LOGO : savedSettings.logoUrl,
+    contactPhone: legacyPhone ? "9117138483" : savedSettings.contactPhone,
+    contactEmail: legacyEmail ? "amaresh.r2030i@iimbg.ac.in" : savedSettings.contactEmail,
+    upiId: savedSettings.upiId || "payments@bgbazaar",
+    qrImage: savedSettings.qrImage || "",
+    secondaryUpiId: savedSettings.secondaryUpiId || "",
+    secondaryQrImage: savedSettings.secondaryQrImage || ""
+  };
+}
+
+function migrateProducts(savedProducts) {
+  return savedProducts.map((item) => {
+    const totalStock = Number(item.totalStock ?? item.quantity ?? 0);
+    const soldQuantity = Number(item.soldQuantity ?? 0);
+    const legacyImage = !item.image || item.image.includes("images.unsplash.com");
+    return {
+      id: item.id || crypto.randomUUID(),
+      name: item.name || "Untitled product",
+      description: item.description || "Product details available at BG BAZAAR.",
+      category: item.category || "General",
+      image: legacyImage ? DEFAULT_IMAGE : item.image,
+      price: Number(item.price || 0),
+      totalStock,
+      soldQuantity: Math.min(soldQuantity, totalStock),
+      listed: item.listed !== false,
+      showPublicQuantity: item.showPublicQuantity === true,
+      createdAt: item.createdAt || new Date().toISOString()
+    };
+  });
+}
+
+function migrateOrders(savedOrders) {
+  return savedOrders.map((order, index) => {
+    const createdAt = order.createdAt
+      ? new Date(order.createdAt).toISOString()
+      : new Date().toISOString();
+    return {
+      id: order.id || crypto.randomUUID(),
+      orderNumber: order.orderNumber || `BGB-${new Date(createdAt).getFullYear()}-${String(index + 1).padStart(6, "0")}`,
+      buyerName: order.buyerName || "Unknown buyer",
+      mobileNumber: order.mobileNumber || order.phone || "",
+      emailAddress: order.emailAddress || order.email || "",
+      deliveryLocation: order.deliveryLocation || order.address || DELIVERY_POINT_ADDRESS,
+      notes: order.notes || "",
+      totalAmount: Number(order.totalAmount ?? order.total ?? 0),
+      status: order.status || "Payment Submitted",
+      createdAt,
+      items: (order.items || []).map((item) => ({
+        productId: item.productId || item.id || "",
+        name: item.name || "Product",
+        quantity: Number(item.quantity || 0),
+        unitPrice: Number(item.unitPrice ?? item.price ?? 0),
+        subtotal: Number(item.subtotal ?? (item.price || 0) * (item.quantity || 0))
+      })),
+      utrNumber: order.utrNumber || order.transactionId || "",
+      paymentProofName: order.paymentProofName || "",
+      paymentProofType: order.paymentProofType || "",
+      paymentProofData: order.paymentProofData || "#",
+      paymentSubmittedAt: order.paymentSubmittedAt || createdAt
+    };
+  });
+}
+
+// ============================================
+// OPTIMIZED DATABASE FUNCTIONS
+// ============================================
+async function dbSave(path, data) {
+  try {
+    if (data.id) {
+      await set(ref(db, path + "/" + data.id), data);
+    } else {
+      const newRef = push(ref(db, path));
+      data.id = newRef.key;
+      await set(newRef, data);
+    }
+    return data;
+  } catch (error) {
+    throw new Error("Failed to save data: " + error.message);
+  }
+}
+
+async function dbGet(path) {
+  const snapshot = await get(ref(db, path));
+  return snapshot.exists() ? snapshot.val() : null;
+}
+
+async function dbGetAll(path) {
+  const snapshot = await get(ref(db, path));
+  if (!snapshot.exists()) return [];
+  const data = snapshot.val();
+  return Object.values(data);
+}
+
+async function dbGetPaginated(path, limit = 20, lastKey = null) {
+  let queryRef = query(ref(db, path), orderByChild('createdAt'));
+  if (lastKey) {
+    queryRef = query(queryRef, startAfter(lastKey));
+  }
+  queryRef = query(queryRef, limitToFirst(limit + 1));
+  const snapshot = await get(queryRef);
+  if (!snapshot.exists()) return { items: [], hasMore: false };
+  
+  const data = snapshot.val();
+  const items = Object.values(data);
+  const hasMore = items.length > limit;
+  const resultItems = hasMore ? items.slice(0, -1) : items;
+  const lastItem = resultItems.length > 0 ? resultItems[resultItems.length - 1] : null;
+  
+  return {
+    items: resultItems,
+    hasMore,
+    lastKey: lastItem ? lastItem.createdAt : null
+  };
+}
+
+async function dbGetUserOrders(uid, limit = 20) {
+  const userOrdersRef = query(
+    ref(db, 'orders'), 
+    orderByChild('userId'), 
+    equalTo(uid),
+    limitToLast(limit)
+  );
+  const snapshot = await get(userOrdersRef);
+  if (!snapshot.exists()) return [];
+  return Object.values(snapshot.val());
+}
+
+async function dbDelete(path) {
+  await remove(ref(db, path));
+}
+
+async function dbUpdate(path, data) {
+  await update(ref(db, path), data);
+  return data;
+}
+
+async function batchUpdateProducts(products) {
+  const updates = {};
+  products.forEach(product => {
+    updates[`products/${product.id}`] = product;
+  });
+  await update(ref(db), updates);
+}
+
+async function subscribeToCollection(path, callback) {
+  onValue(ref(db, path), (snapshot) => {
+    const data = snapshot.val();
+    callback(data ? Object.values(data) : []);
+  }, (error) => {
+    console.error("Realtime subscription error:", error);
+  });
+}
+
+// ============================================
+// USER FUNCTIONS
+// ============================================
+async function saveUserData(uid, data) {
+  await set(ref(db, `users/${uid}`), data);
+  return data;
+}
+
+async function getUserData(uid) {
+  const snapshot = await get(ref(db, `users/${uid}`));
+  return snapshot.exists() ? snapshot.val() : null;
+}
+
+async function getUserCart(uid) {
+  const snapshot = await get(ref(db, `users/${uid}/cart`));
+  return snapshot.exists() ? snapshot.val() : [];
+}
+
+async function saveUserCart(uid, cartData) {
+  await set(ref(db, `users/${uid}/cart`), cartData);
+}
+
+function mergeCarts(localCart, savedCart) {
+  const merged = [...localCart];
+  savedCart.forEach((savedItem) => {
+    const existing = merged.find((item) => item.id === savedItem.id);
+    if (existing) {
+      existing.quantity = Math.max(existing.quantity, savedItem.quantity);
+    } else {
+      merged.push(savedItem);
+    }
+  });
+  return merged;
+}
+
+async function loadUserCart(uid) {
+  const savedCart = await getUserCart(uid);
+  const localCart = load("bgbazaar_cart", []);
+  cart = mergeCarts(localCart, savedCart);
+}
+
+async function syncCartToFirebase() {
+  if (isUserLoggedIn && currentUser) {
+    await saveUserCart(currentUser.uid, cart);
+  }
+}
+
+// ============================================
+// CORE BUSINESS FUNCTIONS
+// ============================================
+async function saveCategory(category) {
+  return dbSave("categories", category);
+}
+
+async function saveProduct(product) {
+  return dbSave("products", product);
+}
+
+async function saveSettings(settingsData) {
+  await set(ref(db, "settings"), settingsData);
+  return settingsData;
+}
+
+async function saveOrder(order) {
+  return dbSave("orders", order);
+}
+
+async function deleteCategory(id) {
+  await dbDelete("categories/" + id);
+}
+
+async function deleteProduct(id) {
+  await dbDelete("products/" + id);
+}
+
+async function deleteOrder(id) {
+  await dbDelete("orders/" + id);
+}
+
+async function createOrder(order) {
+  const productsData = await dbGetAll("products");
+  const changedProducts = [];
+  
+  for (const item of order.items || []) {
+    const product = productsData.find((p) => p.id === item.productId);
+    if (!product) throw new Error(`${item.name || "A product"} is no longer available.`);
+    const remaining = Number(product.totalStock || 0) - Number(product.soldQuantity || 0);
+    if (remaining < Number(item.quantity || 0)) {
+      throw new Error(`${product.name} does not have enough stock.`);
+    }
+    product.soldQuantity = Number(product.soldQuantity || 0) + Number(item.quantity || 0);
+    changedProducts.push(product);
+  }
+  
+  await Promise.all(changedProducts.map(saveProduct));
+  const savedOrder = await saveOrder(order);
+  return { order: savedOrder, products: changedProducts };
+}
+
+async function createOrderOptimized(order) {
+  const updates = {};
+  const productsData = await dbGetAll("products");
+  const changedProducts = [];
+  
+  for (const item of order.items || []) {
+    const product = productsData.find((p) => p.id === item.productId);
+    if (!product) throw new Error(`${item.name || "A product"} is no longer available.`);
+    const remaining = Number(product.totalStock || 0) - Number(product.soldQuantity || 0);
+    if (remaining < Number(item.quantity || 0)) {
+      throw new Error(`${product.name} does not have enough stock.`);
+    }
+    const newSoldQuantity = Number(product.soldQuantity || 0) + Number(item.quantity || 0);
+    updates[`products/${product.id}/soldQuantity`] = newSoldQuantity;
+    product.soldQuantity = newSoldQuantity;
+    changedProducts.push(product);
+  }
+  
+  updates[`orders/${order.id}`] = order;
+  await update(ref(db), updates);
+  return { order, products: changedProducts };
+}
+
+function applySharedState(data, includeOrders = false) {
+  if (!data) return;
+  if (Array.isArray(data.categories)) categories = data.categories;
+  if (Array.isArray(data.products)) products = migrateProducts(data.products);
+  if (data.settings) settings = normalizeSettings(data.settings);
+  if (includeOrders && Array.isArray(data.orders)) orders = migrateOrders(data.orders);
+  save();
+  renderAll();
+}
+
+async function hydrateSharedState(includeOrders = isAdminLoggedIn) {
+  try {
+    const [categoriesData, productsData, settingsData, ordersData] = await Promise.all([
+      dbGetAll("categories"),
+      dbGetAll("products"),
+      dbGet("settings"),
+      includeOrders ? dbGetAll("orders") : Promise.resolve([])
+    ]);
+    
+    applySharedState({
+      categories: categoriesData,
+      products: productsData,
+      settings: settingsData,
+      orders: ordersData
+    }, includeOrders);
+    sharedBackendReady = true;
+  } catch (error) {
+    sharedBackendReady = false;
+    console.warn("Using local cache until Firebase is available:", error.message);
+  }
+}
+
+async function persistShared(action, data, admin = true) {
+  try {
+    switch (action) {
+      case "saveCategory": return await saveCategory(data);
+      case "saveProduct": return await saveProduct(data);
+      case "saveSettings": return await saveSettings(data);
+      case "saveOrder": return await saveOrder(data);
+      case "deleteCategory": return await deleteCategory(data.id);
+      case "deleteProduct": return await deleteProduct(data.id);
+      case "deleteOrder": return await deleteOrder(data.id);
+      case "createOrder": return await createOrder(data);
+      default: throw new Error("Unknown action: " + action);
+    }
+  } catch (error) {
+    alert(error.message || "Operation failed. Please try again.");
+    await hydrateSharedState(isAdminLoggedIn);
+    throw error;
+  }
+}
+
+// ============================================
+// SEARCH FUNCTION
+// ============================================
+function searchProducts(query) {
+  if (!query) return products;
+  const searchTerm = query.toLowerCase();
+  return products.filter(p => 
+    p.name.toLowerCase().includes(searchTerm) ||
+    p.category.toLowerCase().includes(searchTerm) ||
+    p.description.toLowerCase().includes(searchTerm)
+  );
+}
+
+// ============================================
+// LOAD MORE ORDERS
+// ============================================
+async function loadMoreOrders() {
+  if (!isAdminLoggedIn) return false;
+  const result = await dbGetPaginated('orders', PAGE_SIZE, lastOrderKey);
+  if (result.items.length > 0) {
+    orders = [...orders, ...result.items];
+    lastOrderKey = result.lastKey;
+    currentPage++;
+    renderOrders();
+    renderDashboard();
+  }
+  return result.hasMore;
+}
+
+// ============================================
+// SUBSCRIBE TO USER ORDERS
+// ============================================
+function subscribeToOrders(uid) {
+  if (unsubscribeOrders) {
+    unsubscribeOrders();
+    unsubscribeOrders = null;
+  }
+  
+  if (!uid) return;
+  
+  const ordersRef = query(
+    ref(db, 'orders'),
+    orderByChild('userId'),
+    equalTo(uid)
+  );
+  
+  unsubscribeOrders = onValue(ordersRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      orders = migrateOrders(Object.values(data));
+      renderAll();
+    }
+  });
+}
+
+// ============================================
+// IMAGE PROCESSING FUNCTIONS
+// ============================================
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImageFile(file) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("The selected image could not be read."));
+    };
+    image.src = objectUrl;
+  });
+}
+
+async function optimizeImageFile(file, maxDimension, quality = 0.78, outputType = "image/jpeg") {
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error("Image is too large. Choose a file smaller than 12 MB.");
+  }
+
+  const image = await loadImageFile(file);
+  const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Image processing is not supported in this browser.");
+  context.drawImage(image, 0, 0, width, height);
+  return canvas.toDataURL(outputType, quality);
+}
+
+async function prepareProofData(file) {
+  const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+  if (isPdf) {
+    if (file.size > MAX_PDF_BYTES) {
+      throw new Error("PDF payment proof must be smaller than 1.5 MB.");
+    }
+    return fileToDataUrl(file);
+  }
+  return optimizeImageFile(file, 1400, 0.76);
+}
+
+// ============================================
+// CSV AND EXPORT FUNCTIONS
+// ============================================
 function buildOrdersCsv() {
   const headers = [
-    "Order Number",
-    "Created At",
-    "Buyer Name",
-    "Mobile Number",
-    "Email Address",
-    "Delivery Point Address",
-    "Items",
-    "Total Amount",
-    "Order Status",
-    "UTR Number",
-    "Payment Proof File",
-    "Payment Submitted At"
+    "Order Number", "Created At", "Buyer Name", "Mobile Number",
+    "Email Address", "Delivery Point Address", "Items", "Total Amount",
+    "Order Status", "UTR Number", "Payment Proof File", "Payment Submitted At"
   ];
+  
   const rows = orders.map((order) => [
     order.orderNumber,
     new Date(order.createdAt).toLocaleString("en-IN"),
@@ -475,15 +709,14 @@ function buildOrdersCsv() {
     order.mobileNumber,
     order.emailAddress,
     order.deliveryLocation || DELIVERY_POINT_ADDRESS,
-    order.items
-      .map((item) => `${item.name} x ${item.quantity} @ ${money(item.unitPrice)}`)
-      .join("; "),
+    order.items.map((item) => `${item.name} x ${item.quantity} @ ${money(item.unitPrice)}`).join("; "),
     orderTotal(order),
     order.status,
     order.utrNumber,
     order.paymentProofName || proofFileName(order.orderNumber, order.paymentProofType),
     order.paymentSubmittedAt ? new Date(order.paymentSubmittedAt).toLocaleString("en-IN") : ""
   ]);
+  
   return [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
 }
 
@@ -503,6 +736,9 @@ function downloadOrdersCsv() {
   URL.revokeObjectURL(url);
 }
 
+// ============================================
+// ORDER PROOF FUNCTIONS
+// ============================================
 function openPaymentProof(orderId) {
   const order = orders.find((item) => item.id === orderId);
   if (!order || !order.paymentProofData || order.paymentProofData === "#") {
@@ -529,34 +765,10 @@ function openPaymentProof(orderId) {
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>${safeTitle}</title>
         <style>
-          body {
-            margin: 0;
-            min-height: 100vh;
-            display: grid;
-            place-items: center;
-            background: #0f172a;
-            color: #fff;
-            font-family: Arial, sans-serif;
-          }
-          main {
-            width: min(100% - 32px, 1100px);
-            display: grid;
-            gap: 16px;
-            padding: 24px 0;
-          }
-          h1 {
-            margin: 0;
-            font-size: 22px;
-          }
-          img,
-          iframe {
-            width: 100%;
-            height: min(82vh, 820px);
-            object-fit: contain;
-            border: 0;
-            border-radius: 14px;
-            background: #fff;
-          }
+          body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0f172a; color: #fff; font-family: Arial, sans-serif; }
+          main { width: min(100% - 32px, 1100px); display: grid; gap: 16px; padding: 24px 0; }
+          h1 { margin: 0; font-size: 22px; }
+          img, iframe { width: 100%; height: min(82vh, 820px); object-fit: contain; border: 0; border-radius: 14px; background: #fff; }
         </style>
       </head>
       <body>
@@ -583,17 +795,14 @@ function printOrderDetails(orderId) {
     return;
   }
 
-  const items = order.items
-    .map(
-      (item) => `
-        <tr>
-          <td>${escapeHtml(item.name)}</td>
-          <td>${item.quantity}</td>
-          <td>${money(item.unitPrice)}</td>
-          <td>${money(item.subtotal)}</td>
-        </tr>`
-    )
-    .join("");
+  const items = order.items.map(item => `
+    <tr>
+      <td>${escapeHtml(item.name)}</td>
+      <td>${item.quantity}</td>
+      <td>${money(item.unitPrice)}</td>
+      <td>${money(item.subtotal)}</td>
+    </tr>
+  `).join("");
 
   printWindow.document.write(`
     <!doctype html>
@@ -656,6 +865,9 @@ function printOrderDetails(orderId) {
   printWindow.document.close();
 }
 
+// ============================================
+// RENDER FUNCTIONS
+// ============================================
 function renderShared() {
   $$("#siteLogo, #heroLogo").forEach((logo) => {
     logo.src = settings.logoUrl || DEFAULT_LOGO;
@@ -666,6 +878,7 @@ function renderShared() {
   $$("#navCartCount").forEach((node) => {
     node.textContent = cart.reduce((sum, item) => sum + item.quantity, 0);
   });
+  
   const activeMetric = $("#activeProductsMetric");
   const cartMetric = $("#cartItemsMetric");
   const ordersMetric = $("#ordersMetric");
@@ -706,9 +919,9 @@ function renderFilters() {
   const categoryNames = categories.map(c => c.name).sort();
   categoryFilter.innerHTML =
     `<option value="all">All categories</option>` +
-    categoryNames
-      .map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`)
-      .join("");
+    categoryNames.map((category) => 
+      `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`
+    ).join("");
   categoryFilter.value = categoryNames.includes(previous) ? previous : "all";
 }
 
@@ -718,17 +931,16 @@ function renderProductCategorySelect(preferredCategory = "") {
 
   const currentCategory = preferredCategory || categorySelect.value;
   const categoryNames = categories.map((category) => category.name).sort();
-  const legacyOption =
-    currentCategory && !categoryNames.includes(currentCategory)
-      ? `<option value="${escapeHtml(currentCategory)}">${escapeHtml(currentCategory)} (Archived)</option>`
-      : "";
+  const legacyOption = currentCategory && !categoryNames.includes(currentCategory)
+    ? `<option value="${escapeHtml(currentCategory)}">${escapeHtml(currentCategory)} (Archived)</option>`
+    : "";
 
   categorySelect.innerHTML =
     `<option value="">${categoryNames.length ? "Select a category" : "Create a category first"}</option>` +
     legacyOption +
-    categoryNames
-      .map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`)
-      .join("");
+    categoryNames.map((category) => 
+      `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`
+    ).join("");
   categorySelect.value = currentCategory;
 }
 
@@ -738,23 +950,21 @@ function renderCategories() {
   if (!categoriesList || !isAdminLoggedIn) return;
 
   categoriesList.innerHTML = categories.length
-    ? categories
-        .map((category) => {
-          const productCount = products.filter(p => p.category === category.name).length;
-          return `
-            <div style="padding: 12px; background: #fff; border: 1px solid var(--line); border-radius: 6px; display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; margin-bottom: 10px;">
-              <div>
-                <strong>${escapeHtml(category.name)}</strong>
-                <p style="margin: 4px 0 0; color: var(--muted); font-size: 13px;">${productCount} products</p>
-              </div>
-              <div style="display: flex; gap: 6px;">
-                <button class="ghost-btn" type="button" data-edit-category="${category.id}" style="padding: 6px 10px; font-size: 12px;">Edit</button>
-                <button class="danger-btn" type="button" data-delete-category="${category.id}" style="padding: 6px 10px; font-size: 12px;">Delete</button>
-              </div>
+    ? categories.map((category) => {
+        const productCount = products.filter(p => p.category === category.name).length;
+        return `
+          <div style="padding: 12px; background: #fff; border: 1px solid var(--line); border-radius: 6px; display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; margin-bottom: 10px;">
+            <div>
+              <strong>${escapeHtml(category.name)}</strong>
+              <p style="margin: 4px 0 0; color: var(--muted); font-size: 13px;">${productCount} products</p>
             </div>
-          `;
-        })
-        .join("")
+            <div style="display: flex; gap: 6px;">
+              <button class="ghost-btn" type="button" data-edit-category="${category.id}" style="padding: 6px 10px; font-size: 12px;">Edit</button>
+              <button class="danger-btn" type="button" data-delete-category="${category.id}" style="padding: 6px 10px; font-size: 12px;">Delete</button>
+            </div>
+          </div>
+        `;
+      }).join("")
     : `<div class="empty">No categories yet.</div>`;
 }
 
@@ -784,32 +994,29 @@ function renderShop() {
   const query = ($("#searchInput")?.value || "").trim().toLowerCase();
   const category = $("#categoryFilter")?.value || "all";
 
-  const visible = products.filter((item) => {
+  let visible = searchProducts(query);
+  visible = visible.filter(item => {
     const remaining = remainingStock(item);
-    const matchesQuery =
-      item.name.toLowerCase().includes(query) ||
-      item.category.toLowerCase().includes(query);
     const matchesCategory = category === "all" || item.category === category;
-    return item.listed && remaining > 0 && matchesQuery && matchesCategory;
+    return item.listed && remaining > 0 && matchesCategory;
   });
 
   productGrid.innerHTML = visible.length
-    ? visible
-        .map((item) => {
-          const remaining = remainingStock(item);
-          const cartQuantity = cart.find((cartItem) => cartItem.id === item.id)?.quantity || 0;
-          const stockClass = remaining === 0 ? "out" : remaining <= LOW_STOCK_THRESHOLD ? "low" : "";
-          const publicStock = item.showPublicQuantity
-            ? `<span class="stock ${stockClass}">Stock left: ${remaining}</span>`
-            : `<span class="stock ${stockClass}">${stockStatus(item)}</span>`;
-          const purchaseControl = cartQuantity
-            ? `<div class="product-quantity-controls" aria-label="${escapeHtml(item.name)} quantity in cart">
-                <button class="qty-btn" type="button" data-card-minus="${item.id}" aria-label="Remove one ${escapeHtml(item.name)}">-</button>
-                <strong>${cartQuantity}</strong>
-                <button class="qty-btn" type="button" data-card-plus="${item.id}" ${cartQuantity >= remaining ? "disabled" : ""} aria-label="Add one ${escapeHtml(item.name)}">+</button>
-              </div>`
-            : `<button class="primary-btn" type="button" data-add="${item.id}" ${remaining === 0 ? "disabled" : ""}>Add to cart</button>`;
-          return `
+    ? visible.map((item) => {
+        const remaining = remainingStock(item);
+        const cartQuantity = cart.find((cartItem) => cartItem.id === item.id)?.quantity || 0;
+        const stockClass = remaining === 0 ? "out" : remaining <= LOW_STOCK_THRESHOLD ? "low" : "";
+        const publicStock = item.showPublicQuantity
+          ? `<span class="stock ${stockClass}">Stock left: ${remaining}</span>`
+          : `<span class="stock ${stockClass}">${stockStatus(item)}</span>`;
+        const purchaseControl = cartQuantity
+          ? `<div class="product-quantity-controls" aria-label="${escapeHtml(item.name)} quantity in cart">
+              <button class="qty-btn" type="button" data-card-minus="${item.id}" aria-label="Remove one ${escapeHtml(item.name)}">-</button>
+              <strong>${cartQuantity}</strong>
+              <button class="qty-btn" type="button" data-card-plus="${item.id}" ${cartQuantity >= remaining ? "disabled" : ""} aria-label="Add one ${escapeHtml(item.name)}">+</button>
+            </div>`
+          : `<button class="primary-btn" type="button" data-add="${item.id}" ${remaining === 0 ? "disabled" : ""}>Add to cart</button>`;
+        return `
           <article class="product-card">
             <img src="${escapeHtml(item.image || DEFAULT_IMAGE)}" alt="${escapeHtml(item.name)}">
             <div class="product-body">
@@ -826,8 +1033,7 @@ function renderShop() {
             </div>
           </article>
         `;
-        })
-        .join("")
+      }).join("")
     : `<div class="empty">No listed products match the selected filters.</div>`;
 }
 
@@ -836,15 +1042,15 @@ function renderCart() {
   const rows = getCartRows();
   const cartTotalNode = $("#cartTotal");
   const paymentAmount = $("#paymentAmount");
+  
   if (cartTotalNode) cartTotalNode.textContent = money(cartTotal());
   if (paymentAmount) paymentAmount.textContent = money(cartTotal());
 
   if (cartList) {
     cartList.innerHTML = rows.length
-      ? rows
-          .map((row) => {
-            const subtotal = row.product.price * row.quantity;
-            return `
+      ? rows.map((row) => {
+          const subtotal = row.product.price * row.quantity;
+          return `
             <article class="cart-item">
               <div>
                 <strong>${escapeHtml(row.product.name)}</strong>
@@ -859,8 +1065,7 @@ function renderCart() {
               </div>
             </article>
           `;
-          })
-          .join("")
+        }).join("")
       : `<div class="empty">Your cart is empty.</div>`;
   }
 
@@ -869,12 +1074,9 @@ function renderCart() {
     checkoutSummary.innerHTML = rows.length
       ? `
         <h3>Order summary</h3>
-        ${rows
-          .map(
-            (row) =>
-              `<p>${escapeHtml(row.product.name)} x ${row.quantity} <strong>${money(row.product.price * row.quantity)}</strong></p>`
-          )
-          .join("")}
+        ${rows.map(row => 
+          `<p>${escapeHtml(row.product.name)} x ${row.quantity} <strong>${money(row.product.price * row.quantity)}</strong></p>`
+        ).join("")}
       `
       : `<div class="empty">Your cart is empty. Add items before payment submission.</div>`;
   }
@@ -884,10 +1086,10 @@ function renderCart() {
   const secondaryPaymentBox = $("#secondaryPaymentBox");
   const secondaryUpiQr = $("#secondaryUpiQr");
   const secondaryUpiLabel = $("#secondaryUpiLabel");
-  if (upiQr) {
-    upiQr.src = settings.qrImage || DEFAULT_LOGO;
-  }
+  
+  if (upiQr) upiQr.src = settings.qrImage || DEFAULT_LOGO;
   if (upiLabel) upiLabel.textContent = `${settings.upiId} - ${money(cartTotal())}`;
+  
   if (secondaryPaymentBox) {
     const hasSecondaryQr = Boolean(settings.secondaryQrImage);
     secondaryPaymentBox.classList.toggle("hidden", !hasSecondaryQr);
@@ -914,9 +1116,7 @@ function showAdminPanel(panelId = "dashboardOverview") {
   const tabs = $$("[data-admin-tab]");
   if (!panels.length) return;
 
-  const targetPanel = panels.some((panel) => panel.dataset.adminPanel === panelId)
-    ? panelId
-    : "dashboardOverview";
+  const targetPanel = panels.some((panel) => panel.dataset.adminPanel === panelId) ? panelId : "dashboardOverview";
   activeAdminPanel = targetPanel;
 
   panels.forEach((panel) => {
@@ -938,10 +1138,9 @@ function renderAdmin() {
   if (!adminList || !isAdminLoggedIn) return;
 
   adminList.innerHTML = products.length
-    ? products
-        .map((item) => {
-          const remaining = remainingStock(item);
-          return `
+    ? products.map((item) => {
+        const remaining = remainingStock(item);
+        return `
           <article class="admin-item">
             <div>
               <strong>${escapeHtml(item.name)}</strong>
@@ -958,8 +1157,7 @@ function renderAdmin() {
             </div>
           </article>
         `;
-        })
-        .join("")
+      }).join("")
     : `<div class="empty">No products yet.</div>`;
 }
 
@@ -989,12 +1187,9 @@ function renderLowStockAlerts() {
   if (!lowStockAlerts) return;
   const lowProducts = products.filter((item) => item.listed && remainingStock(item) <= LOW_STOCK_THRESHOLD);
   lowStockAlerts.innerHTML = lowProducts.length
-    ? lowProducts
-        .map(
-          (item) =>
-            `<div class="alert-row"><strong>${escapeHtml(item.name)}</strong> is ${stockStatus(item).toLowerCase()} with ${remainingStock(item)} units left.</div>`
-        )
-        .join("")
+    ? lowProducts.map(item => 
+        `<div class="alert-row"><strong>${escapeHtml(item.name)}</strong> is ${stockStatus(item).toLowerCase()} with ${remainingStock(item)} units left.</div>`
+      ).join("")
     : `<div class="muted">No low-stock alerts. Threshold is ${LOW_STOCK_THRESHOLD} units.</div>`;
 }
 
@@ -1007,9 +1202,7 @@ function renderInventoryTable() {
         <tr><th>Product</th><th>Price</th><th>Total stock</th><th>Sold</th><th>Remaining</th><th>Status</th></tr>
       </thead>
       <tbody>
-        ${products
-          .map(
-            (item) => `
+        ${products.map(item => `
           <tr>
             <td>${escapeHtml(item.name)}</td>
             <td>${money(item.price)}</td>
@@ -1018,9 +1211,7 @@ function renderInventoryTable() {
             <td>${remainingStock(item)}</td>
             <td>${stockStatus(item)}</td>
           </tr>
-        `
-          )
-          .join("")}
+        `).join("")}
       </tbody>
     </table>
   `;
@@ -1055,6 +1246,7 @@ function renderRevenueTable() {
 function renderOrders() {
   const ordersList = $("#ordersList");
   if (!ordersList || !isAdminLoggedIn) return;
+  
   const query = ($("#orderSearchInput")?.value || "").trim().toLowerCase();
   const visibleOrders = orders.filter((order) => {
     if (!query) return true;
@@ -1065,39 +1257,40 @@ function renderOrders() {
       order.mobileNumber,
       order.buyerName,
       ...(order.items || []).map((item) => item.name)
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
+    ].filter(Boolean).join(" ").toLowerCase();
     return searchable.includes(query);
   });
 
+  // Show load more button if needed
+  const loadMoreBtn = $("#loadMoreOrders");
+  if (loadMoreBtn) {
+    loadMoreBtn.classList.toggle("hidden", visibleOrders.length < orders.length);
+  }
+
   ordersList.innerHTML = visibleOrders.length
-    ? visibleOrders
-        .slice()
-        .reverse()
-        .map((order) => {
-          const proofLabel = order.paymentProofType === "application/pdf" ? "Open PDF proof" : "Open screenshot";
-          const hasProofData = order.paymentProofData && order.paymentProofData !== "#";
-          const downloadName = escapeHtml(order.paymentProofName || proofFileName(order.orderNumber, order.paymentProofType));
-          const proofPreview = !hasProofData
-            ? `<p class="muted">No payment proof uploaded.</p>`
-            : isImageProof(order)
-            ? `<div class="proof-card">
-                <p class="muted">Payment screenshot</p>
-                <button class="proof-image-button" type="button" data-proof-open="${escapeHtml(order.id)}" aria-label="Open payment screenshot">
-                  <img src="${escapeHtml(order.paymentProofData)}" alt="Payment proof screenshot for ${escapeHtml(order.orderNumber)}" loading="lazy">
-                </button>
-                <div class="proof-actions">
-                  <button class="proof-preview" type="button" data-proof-open="${escapeHtml(order.id)}">Open screenshot</button>
-                  <a class="proof-preview" href="${escapeHtml(order.paymentProofData)}" download="${downloadName}">Download proof</a>
-                </div>
-              </div>`
-            : `<div class="proof-actions">
-                <button class="proof-preview" type="button" data-proof-open="${escapeHtml(order.id)}">${proofLabel}</button>
+    ? visibleOrders.slice().reverse().map((order) => {
+        const proofLabel = order.paymentProofType === "application/pdf" ? "Open PDF proof" : "Open screenshot";
+        const hasProofData = order.paymentProofData && order.paymentProofData !== "#";
+        const downloadName = escapeHtml(order.paymentProofName || proofFileName(order.orderNumber, order.paymentProofType));
+        const proofPreview = !hasProofData
+          ? `<p class="muted">No payment proof uploaded.</p>`
+          : isImageProof(order)
+          ? `<div class="proof-card">
+              <p class="muted">Payment screenshot</p>
+              <button class="proof-image-button" type="button" data-proof-open="${escapeHtml(order.id)}" aria-label="Open payment screenshot">
+                <img src="${escapeHtml(order.paymentProofData)}" alt="Payment proof screenshot for ${escapeHtml(order.orderNumber)}" loading="lazy">
+              </button>
+              <div class="proof-actions">
+                <button class="proof-preview" type="button" data-proof-open="${escapeHtml(order.id)}">Open screenshot</button>
                 <a class="proof-preview" href="${escapeHtml(order.paymentProofData)}" download="${downloadName}">Download proof</a>
-              </div>`;
-          return `
+              </div>
+            </div>`
+          : `<div class="proof-actions">
+              <button class="proof-preview" type="button" data-proof-open="${escapeHtml(order.id)}">${proofLabel}</button>
+              <a class="proof-preview" href="${escapeHtml(order.paymentProofData)}" download="${downloadName}">Download proof</a>
+            </div>`;
+        
+        return `
           <article class="order-item">
             <div class="order-actions">
               <div>
@@ -1119,16 +1312,15 @@ function renderOrders() {
                 ${proofPreview}
               </div>
             </div>
-            <p class="muted">${order.items
-              .map((item) => `${escapeHtml(item.name)} x ${item.quantity} @ ${money(item.unitPrice)}`)
-              .join(", ")}</p>
+            <p class="muted">${order.items.map(item => 
+              `${escapeHtml(item.name)} x ${item.quantity} @ ${money(item.unitPrice)}`
+            ).join(", ")}</p>
             <div class="order-actions">
               <label>
                 Order status
                 <select data-order-status="${order.id}">
-                  ${ORDER_STATUSES.map(
-                    (status) =>
-                      `<option value="${status}" ${status === order.status ? "selected" : ""}>${status}</option>`
+                  ${ORDER_STATUSES.map(status => 
+                    `<option value="${status}" ${status === order.status ? "selected" : ""}>${status}</option>`
                   ).join("")}
                 </select>
               </label>
@@ -1137,8 +1329,7 @@ function renderOrders() {
             </div>
           </article>
         `;
-        })
-        .join("")
+      }).join("")
     : `<div class="empty">${orders.length ? "No orders match your search." : "No orders have been submitted."}</div>`;
 }
 
@@ -1162,23 +1353,6 @@ function renderBrandingForm() {
     const secondaryPreview = $("#adminSecondaryQrPreview");
     if (secondaryPreview) secondaryPreview.src = settings.secondaryQrImage || DEFAULT_LOGO;
   }
-}
-
-function renderAll() {
-  renderShared();
-  renderUserStatus();
-  renderFilters();
-  renderShop();
-  renderCart();
-  renderAuth();
-  showAdminPanel(activeAdminPanel);
-  renderBrandingForm();
-  renderCategories();
-  renderAdmin();
-  renderOrders();
-  renderDashboard();
-  renderUserOrders();
-  save();
 }
 
 function renderUserOrders() {
@@ -1212,6 +1386,26 @@ function renderUserOrders() {
   }
 }
 
+function renderAll() {
+  renderShared();
+  renderUserStatus();
+  renderFilters();
+  renderShop();
+  renderCart();
+  renderAuth();
+  showAdminPanel(activeAdminPanel);
+  renderBrandingForm();
+  renderCategories();
+  renderAdmin();
+  renderOrders();
+  renderDashboard();
+  renderUserOrders();
+  save();
+}
+
+// ============================================
+// CART FUNCTIONS
+// ============================================
 async function addToCart(id) {
   const product = products.find((item) => item.id === id);
   if (!product || remainingStock(product) < 1) return;
@@ -1239,6 +1433,9 @@ async function changeCartQuantity(id, amount) {
   renderAll();
 }
 
+// ============================================
+// PRODUCT FORM FUNCTIONS
+// ============================================
 function fillProductForm(id) {
   const productForm = $("#productForm");
   const item = products.find((product) => product.id === id);
@@ -1266,61 +1463,11 @@ function resetProductForm() {
   productForm.elements.showPublicQuantity.checked = false;
 }
 
-function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-function loadImageFile(file) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    const objectUrl = URL.createObjectURL(file);
-    image.onload = () => {
-      URL.revokeObjectURL(objectUrl);
-      resolve(image);
-    };
-    image.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      reject(new Error("The selected image could not be read."));
-    };
-    image.src = objectUrl;
-  });
-}
-
-async function optimizeImageFile(file, maxDimension, quality = 0.78, outputType = "image/jpeg") {
-  if (file.size > MAX_UPLOAD_BYTES) {
-    throw new Error("Image is too large. Choose a file smaller than 12 MB.");
-  }
-
-  const image = await loadImageFile(file);
-  const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
-  const width = Math.max(1, Math.round(image.naturalWidth * scale));
-  const height = Math.max(1, Math.round(image.naturalHeight * scale));
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("Image processing is not supported in this browser.");
-  context.drawImage(image, 0, 0, width, height);
-  return canvas.toDataURL(outputType, quality);
-}
-
-async function prepareProofData(file) {
-  const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
-  if (isPdf) {
-    if (file.size > MAX_PDF_BYTES) {
-      throw new Error("PDF payment proof must be smaller than 1.5 MB.");
-    }
-    return fileToDataUrl(file);
-  }
-  return optimizeImageFile(file, 1400, 0.76);
-}
-
+// ============================================
+// EVENT HANDLERS
+// ============================================
 function attachEvents() {
+  // Admin tabs
   $(".admin-tabs")?.addEventListener("click", (event) => {
     const tab = event.target.closest("[data-admin-tab]");
     if (!tab) return;
@@ -1328,6 +1475,7 @@ function attachEvents() {
     showAdminPanel(tab.dataset.adminTab);
   });
 
+  // Product grid
   $("#productGrid")?.addEventListener("click", async (event) => {
     const id = event.target.dataset.add;
     const cardPlus = event.target.dataset.cardPlus;
@@ -1337,14 +1485,11 @@ function attachEvents() {
     if (cardMinus) await changeCartQuantity(cardMinus, -1);
   });
 
+  // Cart list
   $("#cartList")?.addEventListener("click", async (event) => {
     const { plus, minus, remove } = event.target.dataset;
-    if (plus) {
-      await changeCartQuantity(plus, 1);
-    }
-    if (minus) {
-      await changeCartQuantity(minus, -1);
-    }
+    if (plus) await changeCartQuantity(plus, 1);
+    if (minus) await changeCartQuantity(minus, -1);
     if (remove) {
       cart = cart.filter((item) => item.id !== remove);
       if (isUserLoggedIn && currentUser) await syncCartToFirebase();
@@ -1352,6 +1497,7 @@ function attachEvents() {
     }
   });
 
+  // Admin list
   $("#adminList")?.addEventListener("click", async (event) => {
     const { edit, toggle, delete: deleteId } = event.target.dataset;
     if (edit) fillProductForm(edit);
@@ -1387,6 +1533,7 @@ function attachEvents() {
     }
   });
 
+  // Orders status change
   $("#ordersList")?.addEventListener("change", async (event) => {
     const orderStatusId = event.target.dataset.orderStatus;
     if (orderStatusId) {
@@ -1403,6 +1550,7 @@ function attachEvents() {
     renderAll();
   });
 
+  // Orders actions
   $("#ordersList")?.addEventListener("click", async (event) => {
     const proofButton = event.target.closest("[data-proof-open]");
     if (proofButton) openPaymentProof(proofButton.dataset.proofOpen);
@@ -1422,8 +1570,22 @@ function attachEvents() {
     }
   });
 
+  // Download CSV
   $("#downloadOrdersCsv")?.addEventListener("click", downloadOrdersCsv);
 
+  // Load more orders
+  $("#loadMoreOrders")?.addEventListener("click", async () => {
+    const hasMore = await loadMoreOrders();
+    if (!hasMore) {
+      const btn = $("#loadMoreOrders");
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "No more orders";
+      }
+    }
+  });
+
+  // Product form
   $("#productForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const productForm = event.currentTarget;
@@ -1474,12 +1636,14 @@ function attachEvents() {
     }
   });
 
+  // Branding form
   $("#brandingForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const brandingForm = event.currentTarget;
     const form = new FormData(brandingForm);
     const logoFile = form.get("logoFile");
     let logoUrl = settings.logoUrl || DEFAULT_LOGO;
+    
     try {
       if (logoFile && logoFile.size > 0) {
         const isSvg = logoFile.type === "image/svg+xml" || /\.svg$/i.test(logoFile.name);
@@ -1499,6 +1663,7 @@ function attachEvents() {
       alert(error.message || "The logo could not be uploaded.");
       return;
     }
+    
     const previousSettings = { ...settings };
     settings = {
       siteName: form.get("siteName").trim() || "BG BAZAAR",
@@ -1510,11 +1675,13 @@ function attachEvents() {
       secondaryUpiId: settings.secondaryUpiId || "",
       secondaryQrImage: settings.secondaryQrImage || ""
     };
+    
     if (!save()) {
       settings = previousSettings;
       alert(STORAGE_WARNING);
       return;
     }
+    
     try {
       const savedSettings = await persistShared("saveSettings", settings);
       settings = normalizeSettings(savedSettings || settings);
@@ -1527,6 +1694,7 @@ function attachEvents() {
     }
   });
 
+  // Settings form
   $("#settingsForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const settingsForm = event.currentTarget;
@@ -1535,6 +1703,7 @@ function attachEvents() {
     const secondaryQrFile = form.get("secondaryQrImage");
     let qrImage = settings.qrImage;
     let secondaryQrImage = settings.secondaryQrImage || "";
+    
     try {
       if (qrFile && qrFile.size > 0) {
         const isAllowedType = ["image/jpeg", "image/png", "image/webp"].includes(qrFile.type);
@@ -1556,16 +1725,19 @@ function attachEvents() {
       alert(error.message || "The payment QR image could not be uploaded.");
       return;
     }
+    
     const previousSettings = { ...settings };
     settings.upiId = form.get("upiId").trim() || "payments@bgbazaar";
     settings.qrImage = qrImage;
     settings.secondaryUpiId = form.get("secondaryUpiId").trim();
     settings.secondaryQrImage = secondaryQrImage;
+    
     if (!save()) {
       settings = previousSettings;
       alert(STORAGE_WARNING);
       return;
     }
+    
     try {
       const savedSettings = await persistShared("saveSettings", settings);
       settings = normalizeSettings(savedSettings || settings);
@@ -1580,6 +1752,7 @@ function attachEvents() {
     }
   });
 
+  // Category form
   $("#categoryForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -1607,6 +1780,7 @@ function attachEvents() {
     }
   });
 
+  // Categories list
   $("#categoriesList")?.addEventListener("click", async (event) => {
     const editId = event.target.dataset.editCategory;
     const deleteId = event.target.dataset.deleteCategory;
@@ -1625,16 +1799,20 @@ function attachEvents() {
     }
   });
 
+  // Reset category
   $("#resetCategoryBtn")?.addEventListener("click", resetCategoryForm);
 
+  // Payment form
   $("#paymentForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const paymentForm = event.currentTarget;
     const checkoutMessage = $("#checkoutMessage");
     const submitButton = $("#submitOrderBtn");
     const rows = getCartRows();
+    
     checkoutMessage.classList.remove("error");
     checkoutMessage.textContent = "";
+    
     if (!rows.length) {
       checkoutMessage.textContent = "Add at least one product before checkout.";
       checkoutMessage.classList.add("error");
@@ -1643,6 +1821,7 @@ function attachEvents() {
 
     const form = new FormData(paymentForm);
     const proof = form.get("paymentProof");
+    
     if (!acceptedProofFile(proof)) {
       checkoutMessage.textContent = "Upload payment proof as JPG, JPEG, PNG, WebP, or PDF.";
       checkoutMessage.classList.add("error");
@@ -1693,12 +1872,10 @@ function attachEvents() {
       };
 
       checkoutMessage.textContent = "Saving order securely...";
-      const result = await createOrder(order);
+      const result = await createOrderOptimized(order);
       const savedOrder = result?.order || order;
       const changedProducts = result?.products || [];
-      const previousProducts = products;
-      const previousOrders = orders;
-      const previousCart = cart;
+      
       products = products.map((product) => {
         const changedProduct = changedProducts.find((item) => item.id === product.id);
         return changedProduct || product;
@@ -1706,43 +1883,29 @@ function attachEvents() {
       orders = [...orders.filter((item) => item.id !== savedOrder.id), savedOrder];
       cart = [];
       sessionStorage.setItem("bgbazaar_last_order", JSON.stringify(savedOrder));
+      
+      // Google Sheet sync
+      try {
+        const GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxWj9qFOi8s_avwd1YNku81LVVing5-eBDCRHJJZqU9AYpi4tt_T1_-ZyhKTwIgsVWBVw/exec";
+        const itemsSummary = rows.map(item => {
+          const product = products.find(p => p.id === item.id);
+          return `${product?.name || "Item"} x ${item.quantity} @ Rs. ${product?.price || 0}`;
+        }).join("; ");
 
-      if (!save()) {
-        products = previousProducts;
-        orders = previousOrders;
-        cart = previousCart;
-        save();
-        throw new Error(STORAGE_WARNING);
+        const csvRow = `"${savedOrder.orderNumber}","${new Date().toLocaleString("en-IN")}","${savedOrder.buyerName || ""}","${savedOrder.mobileNumber || ""}","${savedOrder.emailAddress || ""}","${savedOrder.deliveryLocation || ""}","${itemsSummary}","${savedOrder.totalAmount || ""}","Pending","${savedOrder.utrNumber || ""}","${savedOrder.orderNumber}.jpg","${new Date().toLocaleString("en-IN")}"\n`;
+
+        fetch(GOOGLE_WEB_APP_URL, {
+          method: "POST",
+          mode: "no-cors",
+          body: csvRow
+        });
+      } catch (sheetError) {
+        console.error("Google Sheet sync failed:", sheetError);
       }
 
-      // --- GOOGLE SHEET SYNC START ---
-try {
-  const GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxWj9qFOi8s_avwd1YNku81LVVing5-eBDCRHJJZqU9AYpi4tt_T1_-ZyhKTwIgsVWBVw/exec"; 
-
-  // 1. Convert your array items into a clean comma-separated list string
-  const itemsSummary = previousCart.map(item => {
-  // Look up the matching product details from the global products array using the ID
-  const matchedProduct = (typeof products !== 'undefined' ? products : []).find(p => p.id === item.id);
-  
-  const name = matchedProduct ? (matchedProduct.name || matchedProduct.title || "Item") : "Unknown Item";
-  const price = matchedProduct ? (matchedProduct.price || 0) : 0;
-  
-  return `${name} x ${item.quantity || 1} @ Rs. ${price}`;
-}).join("; ");
-
-  // 2. Generate a perfectly balanced CSV row matching your Sheet headers
-  const csvRow = `"${savedOrder.orderNumber}","${new Date().toLocaleString("en-IN")}","${savedOrder.buyerName || ""}","${savedOrder.mobileNumber || ""}","${savedOrder.emailAddress || ""}","${savedOrder.deliveryPointAddress || savedOrder.deliveryLocation || ""}","${itemsSummary}","${savedOrder.totalAmount || ""}","Pending","${savedOrder.utrNumber || ""}","${savedOrder.orderNumber}.jpg","${new Date().toLocaleString("en-IN")}"\n`;
-
-  fetch(GOOGLE_WEB_APP_URL, {
-    method: "POST",
-    mode: "no-cors",
-    body: csvRow
-  });
-  console.log("Sheet Sync Status: Success");
-} catch (sheetError) {
-  console.error("Google Sheet background sync failed:", sheetError);
-}
-// --- GOOGLE SHEET SYNC END ---
+      if (!save()) {
+        throw new Error(STORAGE_WARNING);
+      }
 
       paymentForm.reset();
       checkoutMessage.textContent = `Order ${savedOrder.orderNumber} submitted. Redirecting...`;
@@ -1759,6 +1922,7 @@ try {
     }
   });
 
+  // Admin login
   $("#loginForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -1780,12 +1944,14 @@ try {
     }
   });
 
+  // Admin logout
   $("#logoutBtn")?.addEventListener("click", () => {
     isAdminLoggedIn = false;
     sessionStorage.removeItem("bgbazaar_admin");
     renderAll();
   });
 
+  // Clear cart
   $("#clearCartBtn")?.addEventListener("click", () => {
     cart = [];
     const checkoutMessage = $("#checkoutMessage");
@@ -1796,6 +1962,7 @@ try {
     renderAll();
   });
 
+  // User login
   $("#userLoginForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -1820,6 +1987,7 @@ try {
     }
   });
 
+  // User register
   $("#userRegisterForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -1854,6 +2022,7 @@ try {
     }
   });
 
+  // User logout
   $("#userLogoutBtn")?.addEventListener("click", async () => {
     try {
       if (isUserLoggedIn && currentUser) {
@@ -1871,6 +2040,7 @@ try {
     renderAll();
   });
 
+  // Toggle forms
   $("#showRegisterForm")?.addEventListener("click", () => {
     $("#userLoginForm")?.classList.add("hidden");
     $("#userRegisterForm")?.classList.remove("hidden");
@@ -1885,6 +2055,7 @@ try {
     $("#userRegisterMessage").textContent = "";
   });
 
+  // User dropdown
   $("#userBtn")?.addEventListener("click", (event) => {
     event.stopPropagation();
     const dropdown = $("#userDropdown");
@@ -1900,24 +2071,30 @@ try {
     }
   });
 
+  // Reset form
   $("#resetFormBtn")?.addEventListener("click", resetProductForm);
+
+  // Search with debounce
+  const debouncedSearch = debounce(() => {
+    renderFilters();
+    renderShop();
+  }, 300);
 
   ["#searchInput", "#categoryFilter"].forEach((selector) => {
     const control = $(selector);
-    control?.addEventListener("input", () => {
-      renderFilters();
-      renderShop();
-    });
-    control?.addEventListener("change", () => {
-      renderFilters();
-      renderShop();
-    });
+    control?.addEventListener("input", debouncedSearch);
+    control?.addEventListener("change", debouncedSearch);
   });
 
+  // Order search
   $("#orderSearchInput")?.addEventListener("input", renderOrders);
 }
 
+// ============================================
+// REALTIME LISTENERS
+// ============================================
 function setupRealtimeListeners() {
+  // Auth state
   onAuthStateChanged(auth, async (user) => {
     if (user) {
       currentUser = user;
@@ -1925,51 +2102,62 @@ function setupRealtimeListeners() {
       userData = savedUserData || { email: user.email };
       await loadUserCart(user.uid);
       isUserLoggedIn = true;
+      subscribeToOrders(user.uid);
     } else {
       isUserLoggedIn = false;
       currentUser = null;
       userData = null;
+      if (unsubscribeOrders) {
+        unsubscribeOrders();
+        unsubscribeOrders = null;
+      }
     }
     renderAll();
   });
 
+  // Categories with cache
   onValue(ref(db, "categories"), (snapshot) => {
     const data = snapshot.val();
     categories = data ? Object.values(data) : [];
+    setCachedData('categories', categories);
     renderAll();
   });
+
+  // Products with cache
   onValue(ref(db, "products"), (snapshot) => {
     const data = snapshot.val();
     products = migrateProducts(data ? Object.values(data) : []);
+    setCachedData('products', products);
     renderAll();
   });
+
+  // Settings with cache
   onValue(ref(db, "settings"), (snapshot) => {
     if (snapshot.exists()) {
       settings = normalizeSettings(snapshot.val());
+      setCachedData('settings', settings);
       renderAll();
     }
   });
-  onValue(ref(db, "orders"), (snapshot) => {
-    const data = snapshot.val();
-    if (data) {
-      orders = migrateOrders(Object.values(data));
-      renderAll();
-      Object.values(data).forEach(order => trackLiveOrder(order));
-    }
-  });
+
+  // Orders for admin only
+  if (isAdminLoggedIn) {
+    onValue(ref(db, "orders"), (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        orders = migrateOrders(Object.values(data));
+        renderAll();
+        Object.values(data).forEach(order => trackLiveOrder(order));
+      }
+    });
+  }
 }
 
-attachEvents();
-renderAll();
-setupRealtimeListeners();
-
-
-// =======================================================
-// UNIFIED GOOGLE SHEETS LIVE & BUTTON SYNC
-// =======================================================
+// ============================================
+// GOOGLE SHEETS SYNC
+// ============================================
 const GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwV4Gq5YcUQ36IImmyPPZTNTMvA3F5Z7RVk9N0Te2LiDVYYE6DKsQAOu16xHM0o9YHWMQ/exec";
 
-// Helper to safely format data fields for the spreadsheet grid columns
 const cleanField = (val) => `"${(val || '').toString().replace(/"/g, '""')}"`;
 
 function sendToGoogleSheets(csvText) {
@@ -1979,12 +2167,11 @@ function sendToGoogleSheets(csvText) {
     .catch(err => console.error("Sheet Sync Error:", err));
 }
 
-// 1. LIVE TIME FUNCTION (Formats single orders into clean grid rows)
 let processedOrderKeys = new Set();
 
 function trackLiveOrder(orderData) {
   const orderKey = `${orderData.orderNo}_${orderData.status}`;
-  if (processedOrderKeys.has(orderKey)) return; // Prevents duplicate row spamming
+  if (processedOrderKeys.has(orderKey)) return;
   processedOrderKeys.add(orderKey);
 
   const csvLine = `${cleanField(orderData.orderNo)},${cleanField(orderData.createdAt)},${cleanField(orderData.buyerName || orderData.name)},${cleanField(orderData.mobile || orderData.phone)},${cleanField(orderData.email)},${cleanField(orderData.address || orderData.deliveryAddress)},${cleanField(orderData.items)},${cleanField(orderData.total || orderData.amount)},${cleanField(orderData.status)},${cleanField(orderData.utr || orderData.utrNumber)}\n`;
@@ -1992,7 +2179,7 @@ function trackLiveOrder(orderData) {
   sendToGoogleSheets(csvLine);
 }
 
-// 2. BUTTON INTERCEPTOR
+// Button interceptor for CSV downloads
 const originalClick = HTMLAnchorElement.prototype.click;
 HTMLAnchorElement.prototype.click = function() {
   const href = this.href;
@@ -2005,3 +2192,26 @@ HTMLAnchorElement.prototype.click = function() {
   }
   return originalClick.apply(this, arguments);
 };
+
+// ============================================
+// INITIALIZATION
+// ============================================
+// Load from cache first
+const cachedCategories = getCachedData('categories');
+const cachedProducts = getCachedData('products');
+const cachedSettings = getCachedData('settings');
+
+if (cachedCategories) categories = cachedCategories;
+if (cachedProducts) products = migrateProducts(cachedProducts);
+if (cachedSettings) settings = normalizeSettings(cachedSettings);
+
+attachEvents();
+renderAll();
+setupRealtimeListeners();
+
+console.log('✅ BG BAZAAR App initialized with optimizations:');
+console.log('📦 Cache duration:', CACHE_DURATION / 1000, 'seconds');
+console.log('📄 Page size:', PAGE_SIZE, 'items');
+console.log('🔍 Debounce delay: 300ms');
+console.log('🔄 Real-time sync: Enabled');
+console.log('📊 Google Sheets sync: Enabled');
