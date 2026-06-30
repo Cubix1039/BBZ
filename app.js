@@ -56,16 +56,6 @@ const storage = getStorage(app);
 // ============================================
 // CONSTANTS & CONFIGURATION
 // ============================================
-const firebaseConfig = {
-  apiKey: "AIzaSyD4TC6jnYlKjMw2Ot9VcHh0QGmoZdhIU48",
-  authDomain: "amareshprj-msn.firebaseapp.com",
-  projectId: "amareshprj-msn",
-  storageBucket: "amareshprj-msn.firebasestorage.app",
-  messagingSenderId: "96424898401",
-  appId: "1:96424898401:web:ffd28c271d11c95f719f20",
-  measurementId: "G-TNRTBJEXWK",
-  databaseURL: "https://amareshprj-msn-default-rtdb.firebaseio.com"
-};
 
 const DEFAULT_IMAGE = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='675' viewBox='0 0 900 675'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0' x2='1' y1='0' y2='1'%3E%3Cstop offset='0' stop-color='%23099aac'/%3E%3Cstop offset='1' stop-color='%23f59a1a'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='900' height='675' rx='42' fill='%23f8fbff'/%3E%3Ccircle cx='720' cy='90' r='180' fill='%23fff4df'/%3E%3Ccircle cx='135' cy='560' r='150' fill='%23e0f7fb'/%3E%3Crect x='142' y='160' width='616' height='356' rx='34' fill='url(%23bg)' opacity='0.14'/%3E%3Cpath d='M260 405h380' stroke='%23099aac' stroke-width='24' stroke-linecap='round'/%3E%3Cpath d='M300 330h300' stroke='%23f59a1a' stroke-width='24' stroke-linecap='round'/%3E%3Ctext x='450' y='270' text-anchor='middle' font-family='Avenir Next, Segoe UI, Arial, sans-serif' font-size='54' font-weight='800' fill='%23058a99'%3EBG BAZAAR%3C/text%3E%3Ctext x='450' y='465' text-anchor='middle' font-family='Avenir Next, Segoe UI, Arial, sans-serif' font-size='24' font-weight='700' letter-spacing='5' fill='%2364758b'%3ECAMPUS ESSENTIALS%3C/text%3E%3C/svg%3E";
 
