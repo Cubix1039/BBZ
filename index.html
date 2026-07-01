@@ -1,212 +1,76 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Website Under Maintenance</title>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover">
+    <meta name="description" content="BG BAZAAR - Student-led campus essentials marketplace with secure payments and office pickup.">
+    <meta name="theme-color" content="#0797a8">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>BG BAZAAR | Campus Essentials</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="index.html" aria-label="BG BAZAAR home">
+        <img id="siteLogo" alt="BG BAZAAR logo" src="assets/bg-bazaar-logo.jpeg">
+        <span id="siteName">BG BAZAAR</span>
+      </a>
+      <nav aria-label="Main navigation">
+        <a href="index.html" aria-current="page">Home</a>
+        <a href="cart.html">Cart <span id="navCartCount">0</span></a>
+        <a href="checkout.html">Checkout</a>
+        <a href="admin.html">Admin Portal</a>
+      </nav>
+    </header>
 
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <main>
+      <section class="section shop-section" id="products">
+        <div class="shop-intro">
+          <p class="eyebrow">Student Campus Venture</p>
+          <h1>Shop at BG BAZAAR</h1>
+          <p>Browse campus essentials, add items to cart, and complete payment for office pickup.</p>
+        </div>
 
-<style>
-*{
-    margin:0;
-    padding:0;
-    box-sizing:border-box;
-    font-family:'Poppins',sans-serif;
-}
+        <div class="filters" aria-label="Product filters">
+          <label>
+            <span>Search</span>
+            <input id="searchInput" type="search" placeholder="Find products by name...">
+          </label>
+          <label>
+            <span>Filter by Category</span>
+            <select id="categoryFilter"></select>
+          </label>
+        </div>
 
-body{
-    min-height:100vh;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    background:linear-gradient(135deg,#0f172a,#111827,#1e293b);
-    overflow:hidden;
-    color:#fff;
-}
+        <div id="productGrid" class="product-grid" aria-live="polite"></div>
+      </section>
+    </main>
 
-/* Animated Background */
-body::before{
-    content:'';
-    position:absolute;
-    width:500px;
-    height:500px;
-    background:#3b82f6;
-    border-radius:50%;
-    filter:blur(180px);
-    top:-150px;
-    left:-150px;
-    animation:move1 10s infinite alternate;
-}
+    <footer class="site-footer">
+      <div class="footer-grid">
+        <div>
+          <h4>BG BAZAAR</h4>
+          <p>Campus essentials with secure payments and office pickup.</p>
+        </div>
+        <div>
+          <h4>Quick Links</h4>
+          <ul>
+            <li><a href="index.html">Browse Products</a></li>
+            <li><a href="cart.html">Shopping Cart</a></li>
+            <li><a href="checkout.html">Checkout</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Need Help?</h4>
+          <p>Contact us:<br>Amaresh Raj<br><a href="tel:9117138483">9117138483</a><br><a href="mailto:amaresh.r2030i@iimbg.ac.in">amaresh.r2030i@iimbg.ac.in</a></p>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 BG BAZAAR Campus Marketplace. All rights reserved.</p>
+      </div>
+    </footer>
 
-body::after{
-    content:'';
-    position:absolute;
-    width:450px;
-    height:450px;
-    background:#8b5cf6;
-    border-radius:50%;
-    filter:blur(180px);
-    bottom:-150px;
-    right:-150px;
-    animation:move2 12s infinite alternate;
-}
-
-@keyframes move1{
-    to{
-        transform:translate(150px,120px);
-    }
-}
-
-@keyframes move2{
-    to{
-        transform:translate(-120px,-100px);
-    }
-}
-
-.container{
-    position:relative;
-    z-index:10;
-    width:90%;
-    max-width:650px;
-    padding:50px;
-    text-align:center;
-    border-radius:25px;
-    background:rgba(255,255,255,.08);
-    backdrop-filter:blur(18px);
-    border:1px solid rgba(255,255,255,.15);
-    box-shadow:0 20px 50px rgba(0,0,0,.4);
-}
-
-.icon{
-    font-size:80px;
-    margin-bottom:20px;
-    animation:rotate 5s linear infinite;
-}
-
-@keyframes rotate{
-    from{transform:rotate(0deg);}
-    to{transform:rotate(360deg);}
-}
-
-h1{
-    font-size:42px;
-    margin-bottom:15px;
-}
-
-p{
-    color:#d1d5db;
-    line-height:1.8;
-    margin-bottom:30px;
-}
-
-.progress{
-    width:100%;
-    height:10px;
-    background:rgba(255,255,255,.15);
-    border-radius:30px;
-    overflow:hidden;
-}
-
-.progress span{
-    display:block;
-    width:70%;
-    height:100%;
-    border-radius:30px;
-    background:linear-gradient(90deg,#06b6d4,#3b82f6,#8b5cf6);
-    animation:loading 2s infinite;
-}
-
-@keyframes loading{
-    0%{
-        margin-left:-70%;
-    }
-    100%{
-        margin-left:100%;
-    }
-}
-
-.info{
-    margin-top:25px;
-    font-size:15px;
-    color:#9ca3af;
-}
-
-.button{
-    display:inline-block;
-    margin-top:30px;
-    padding:14px 35px;
-    border-radius:50px;
-    text-decoration:none;
-    color:#fff;
-    background:linear-gradient(45deg,#3b82f6,#8b5cf6);
-    transition:.3s;
-}
-
-.button:hover{
-    transform:translateY(-4px);
-    box-shadow:0 10px 25px rgba(59,130,246,.5);
-}
-
-footer{
-    margin-top:35px;
-    color:#6b7280;
-    font-size:14px;
-}
-
-@media(max-width:600px){
-
-.container{
-    padding:35px 25px;
-}
-
-.icon{
-    font-size:60px;
-}
-
-h1{
-    font-size:30px;
-}
-
-}
-</style>
-
-</head>
-<body>
-
-<div class="container">
-
-<div class="icon">⚙️</div>
-
-<h1>We're Under Maintenance</h1>
-
-<p>
-Our website is currently undergoing scheduled maintenance to improve
-your experience. We'll be back online shortly.
-</p>
-
-<div class="progress">
-<span></span>
-</div>
-
-<div class="info">
-Estimated completion: Soon...
-</div>
-
-<a href="#" class="button">Refresh Page</a>
-
-<footer>
-© 2026 Your Company. All Rights Reserved.
-</footer>
-
-</div>
-
-<script>
-document.querySelector(".button").onclick = function(e){
-    e.preventDefault();
-    location.reload();
-}
-</script>
-
-</body>
+    <script type="module" src="app.js"></script>
+  </body>
 </html>

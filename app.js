@@ -1934,10 +1934,9 @@ function attachEvents() {
       isAdminLoggedIn = true;
       sessionStorage.setItem("bgbazaar_admin", "true");
       event.currentTarget.reset();
-      loginMessage.textContent = "Loading dashboard data...";
-      await hydrateSharedState(true);
       loginMessage.textContent = "";
       renderAll();
+      hydrateSharedState(true).then(renderAll).catch(() => renderAll());
     } else {
       isAdminLoggedIn = false;
       loginMessage.textContent = "Invalid admin username or password.";
@@ -2118,17 +2117,21 @@ function setupRealtimeListeners() {
   // Categories with cache
   onValue(ref(db, "categories"), (snapshot) => {
     const data = snapshot.val();
-    categories = data ? Object.values(data) : [];
-    setCachedData('categories', categories);
-    renderAll();
+    if (data) {
+      categories = Object.values(data);
+      setCachedData('categories', categories);
+      renderAll();
+    }
   });
 
   // Products with cache
   onValue(ref(db, "products"), (snapshot) => {
     const data = snapshot.val();
-    products = migrateProducts(data ? Object.values(data) : []);
-    setCachedData('products', products);
-    renderAll();
+    if (data) {
+      products = migrateProducts(Object.values(data));
+      setCachedData('products', products);
+      renderAll();
+    }
   });
 
   // Settings with cache
