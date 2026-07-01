@@ -141,7 +141,7 @@ function save() {
     localStorage.setItem("bgbazaar_categories", JSON.stringify(categories));
     localStorage.setItem("bgbazaar_products", JSON.stringify(products));
     localStorage.setItem("bgbazaar_cart", JSON.stringify(cart));
-    localStorage.setItem("bgbazaar_orders", JSON.stringify(orders));
+    // Orders are now managed via Firebase listeners, not localStorage
     localStorage.setItem("bgbazaar_settings", JSON.stringify(settings));
     return true;
   } catch (error) {
@@ -149,7 +149,6 @@ function save() {
     return false;
   }
 }
-
 function debounce(fn, delay = 300) {
   let timeoutId;
   return function(...args) {
@@ -207,8 +206,10 @@ function isDeliveredOrder(order) {
 }
 
 function generateOrderNumber() {
+  // Uses timestamp to ensure uniqueness regardless of local array size
+  const timestamp = Date.now().toString().slice(-6); 
   const year = new Date().getFullYear();
-  return `BGB-${year}-${String(orders.length + 1).padStart(6, "0")}`;
+  return `BGB-${year}-${timestamp}`;
 }
 
 function acceptedProofFile(file) {
@@ -689,8 +690,7 @@ async function prepareProofData(file) {
     }
     return fileToDataUrl(file);
   }
-  return optimizeImageFile(file, 1400, 0.76);
-}
+  return optimizeImageFile(file, 600, 0.60);
 
 // ============================================
 // CSV AND EXPORT FUNCTIONS
