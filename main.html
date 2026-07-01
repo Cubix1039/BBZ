@@ -2,75 +2,68 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover">
-    <meta name="description" content="BG BAZAAR - Student-led campus essentials marketplace with secure payments and office pickup.">
-    <meta name="theme-color" content="#0797a8">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>BG BAZAAR | Campus Essentials</title>
-    <link rel="stylesheet" href="styles.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Order from BG BAZAAR.">
+    <meta name="theme-color" content="#087f8c">
+    <title>BG BAZAAR | Order Now</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: #f4faf9;
+        color: #123436;
+        font-family: Arial, Helvetica, sans-serif;
+        text-align: center;
+      }
+
+      main {
+        width: min(100%, 520px);
+      }
+
+      h1 {
+        margin: 0 0 28px;
+        font-size: clamp(2rem, 8vw, 4rem);
+        letter-spacing: 0;
+      }
+
+      .order-button {
+        display: inline-flex;
+        min-height: 56px;
+        align-items: center;
+        justify-content: center;
+        padding: 16px 30px;
+        border-radius: 6px;
+        background: #087f8c;
+        color: #fff;
+        font-size: 1.1rem;
+        font-weight: 700;
+        text-decoration: none;
+        box-shadow: 0 8px 20px rgba(8, 127, 140, 0.22);
+        transition: background 160ms ease, transform 160ms ease;
+      }
+
+      .order-button:hover {
+        background: #066b75;
+        transform: translateY(-2px);
+      }
+
+      .order-button:focus-visible {
+        outline: 3px solid #f0b429;
+        outline-offset: 4px;
+      }
+    </style>
   </head>
   <body>
-    <header class="topbar">
-      <a class="brand" href="main.html" aria-label="BG BAZAAR home">
-        <img id="siteLogo" alt="BG BAZAAR logo" src="assets/bg-bazaar-logo.jpeg">
-        <span id="siteName">BG BAZAAR</span>
-      </a>
-      <nav aria-label="Main navigation">
-        <a href="main.html" aria-current="page">Home</a>
-        <a href="cart.html">Cart <span id="navCartCount">0</span></a>
-        <a href="checkout.html">Checkout</a>
-        <a href="admin.html">Admin Portal</a>
-      </nav>
-    </header>
-
     <main>
-      <section class="section shop-section" id="products">
-        <div class="shop-intro">
-          <p class="eyebrow">Student Campus Venture</p>
-          <h1>Shop at BG BAZAAR</h1>
-          <p>Browse campus essentials, add items to cart, and complete payment for office pickup.</p>
-        </div>
-
-        <div class="filters" aria-label="Product filters">
-          <label>
-            <span>Search</span>
-            <input id="searchInput" type="search" placeholder="Find products by name...">
-          </label>
-          <label>
-            <span>Filter by Category</span>
-            <select id="categoryFilter"></select>
-          </label>
-        </div>
-
-        <div id="productGrid" class="product-grid" aria-live="polite"></div>
-      </section>
+      <h1>BG BAZAAR</h1>
+      <a class="order-button" href="https://forms.gle/Xgtz8PZZAVnTHpx56">Press to Order</a>
     </main>
-
-    <footer class="site-footer">
-      <div class="footer-grid">
-        <div>
-          <h4>BG BAZAAR</h4>
-          <p>Campus essentials with secure payments and office pickup.</p>
-        </div>
-        <div>
-          <h4>Quick Links</h4>
-          <ul>
-            <li><a href="main.html">Browse Products</a></li>
-            <li><a href="cart.html">Shopping Cart</a></li>
-            <li><a href="checkout.html">Checkout</a></li>
-          </ul>
-        </div>
-        <div>
-          <h4>Need Help?</h4>
-          <p>Contact us:<br>Amaresh Raj<br><a href="tel:9117138483">9117138483</a><br><a href="mailto:amaresh.r2030i@iimbg.ac.in">amaresh.r2030i@iimbg.ac.in</a></p>
-        </div>
-      </div>
-      <div class="footer-bottom">
-        <p>&copy; 2026 BG BAZAAR Campus Marketplace. All rights reserved.</p>
-      </div>
-    </footer>
-
-    <script type="module" src="app.js"></script>
   </body>
 </html>

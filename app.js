@@ -691,6 +691,7 @@ async function prepareProofData(file) {
     return fileToDataUrl(file);
   }
   return optimizeImageFile(file, 600, 0.60);
+}
 
 // ============================================
 // CSV AND EXPORT FUNCTIONS
@@ -1923,7 +1924,7 @@ function attachEvents() {
   });
 
   // Admin login
-  $("#loginForm")?.addEventListener("submit", async (event) => {
+  $("#loginForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const loginMessage = $("#loginMessage");
